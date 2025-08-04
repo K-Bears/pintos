@@ -1,5 +1,6 @@
 #ifndef VM_UNINIT_H
 #define VM_UNINIT_H
+#include "vm/vm_type.h"
 #include "vm/vm.h"
 
 struct page;
