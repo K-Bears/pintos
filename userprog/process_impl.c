@@ -72,12 +72,16 @@ uint64_t *push_stack(char *arg, size_t size, struct intr_frame *if_) {
         page_bottom -= PGSIZE;
         uint8_t *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
         if (kpage != NULL) {
+            #ifndef VM
             if (!install_page((void *)page_bottom, kpage, true)) {
                 palloc_free_page(kpage);
                 page_bottom += PGSIZE;
                 alloc_fail = true;
                 break;
             }
+            #else
+            //TODO : vm
+            #endif
         }
     }
 

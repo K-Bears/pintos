@@ -1,8 +1,9 @@
 #ifndef VM_VM_H
 #define VM_VM_H
 #include <stdbool.h>
-#include "threads/palloc.h"
 #include "vm/vm_type.h"
+
+#include "threads/palloc.h"
 
 #include "vm/uninit.h"
 #include "vm/anon.h"
