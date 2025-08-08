@@ -490,6 +490,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
+/* USER_STACK 위치에 스택 용도의 PAGE를 생성한다. 성공하면 true를 반환한다. */
 static bool setup_stack(struct intr_frame *if_) {
     bool success = false;
     void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
@@ -498,6 +499,11 @@ static bool setup_stack(struct intr_frame *if_) {
      * TODO: If success, set the rsp accordingly.
      * TODO: You should mark the page is stack. */
     /* TODO: Your code goes here */
+    /* TODO: stack_bottom 위치에 스택을 매핑하고, 즉시 해당 페이지를 확보(claim)하라.
+     * TODO: 성공했다면, rsp 값을 그에 맞게 설정하라.
+     * TODO: 해당 페이지가 스택임을 표시해야 한다. */
+    /* TODO: 여기에 당신의 코드를 작성하세요. */
+
 
     return success;
 }

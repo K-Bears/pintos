@@ -17,7 +17,9 @@ enum vm_type {
     /* Bit flags to store state */
 
     /* Auxillary bit flag marker for store information. You can add more
-     * markers, until the value is fit in the int. */
+     * markers, until the value is fit in the int. 
+     정보를 저장하기 위한 보조적인 비트 플래그 표시자입니다.
+     int형 범위 내에서라면 더 많은 표시자를 추가할 수 있습니다.*/
     VM_MARKER_0 = (1 << 3),
     VM_MARKER_1 = (1 << 4),
 

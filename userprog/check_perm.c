@@ -15,7 +15,7 @@ int64_t get_user(const uint8_t *uaddr) {
         "done_get:\n"  // (페이지 폴트 핸들러가 result를 -1로 설정하고 여기에 점프하도록 수정되어야
                        // 함)
         : "=&a"(result)
-        : "m"(*uaddr), "c"(uaddr));
+        : "m"(*uaddr), "c"(uaddr)); //m =uaddr주소에 접근하라 c= uaddr주소값
     return result;
 }
 

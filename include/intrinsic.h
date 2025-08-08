@@ -5,7 +5,9 @@
    aka PDBR (page directory base register).  This activates our
    new page tables immediately.  See [IA32-v2a] "MOV--Move
    to/from Control Registers" and [IA32-v3a] 3.7.5 "Base Address
-   of the Page Directory". */
+   of the Page Directory".
+   페이지 디렉터리의 물리 주소를 CR3, 즉 PDBR(page directory base register)에 저장한다.
+    이렇게 하면 우리가 설정한 새로운 페이지 테이블이 즉시 활성화된다.*/
 __attribute__((always_inline)) static __inline void lcr3(uint64_t val) {
     __asm __volatile("movq %0, %%cr3" : : "r"(val));
 }

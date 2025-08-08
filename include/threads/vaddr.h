@@ -37,6 +37,9 @@
 /* User stack start */
 #define USER_STACK 0x47480000
 
+/* 1MB기준선 */
+#define PHYS_BASE ((void *) 0xC0000000)
+
 /* Returns true if VADDR is a user virtual address. */
 #define is_user_vaddr(vaddr) (!is_kernel_vaddr((vaddr)))
 

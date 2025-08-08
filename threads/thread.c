@@ -30,7 +30,8 @@
 #define THREAD_BASIC 0xd42df210
 
 /* List of processes in THREAD_READY state, that is, processes
-   that are ready to run but not actually running. */
+   that are ready to run but not actually running. 
+   THREAD_READY 상태에 있는 프로세스들의 목록, 즉 실행할 준비는 되었지만 실제로 실행되고 있지는 않은 프로세스들.*/
 static struct list ready_list;
 static struct list sleep_list;  //	$feat/timer_sleep
 

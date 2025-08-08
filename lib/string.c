@@ -237,7 +237,8 @@ char *strtok_r(char *s, const char *delimiters, char **save_ptr) {
     return token;
 }
 
-/* Sets the SIZE bytes in DST to VALUE. */
+/* Sets the SIZE bytes in DST to VALUE.
+목적지 메모리 주소 */
 void *memset(void *dst_, int value, size_t size) {
     unsigned char *dst = dst_;
 

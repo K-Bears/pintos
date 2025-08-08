@@ -113,7 +113,9 @@ enum intr_level intr_get_level(void) {
     /* Push the flags register on the processor stack, then pop the
        value off the stack into `flags'.  See [IA32-v2b] "PUSHF"
        and "POP" and [IA32-v3a] 5.8.1 "Masking Maskable Hardware
-       Interrupts". */
+       Interrupts". 
+       플래그 레지스터(flags register)를 프로세서의 스택에 푸시한 다음, 그 값을 스택에서 꺼내서 flags 변수에 저장한다. 
+       자세한 내용은 [IA32-v2b]의 "PUSHF" 및 "POP", 그리고 [IA32-v3a]의 5.8.1절 "Masking Maskable Hardware Interrupts"를 참고하라.*/
     asm volatile("pushfq; popq %0" : "=g"(flags));
 
     return flags & FLAG_IF ? INTR_ON : INTR_OFF;

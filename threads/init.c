@@ -141,7 +141,9 @@ static void bss_init(void) {
 
 /* Populates the page table with the kernel virtual mapping,
  * and then sets up the CPU to use the new page directory.
- * Points base_pml4 to the pml4 it creates. */
+ * Points base_pml4 to the pml4 it creates.
+ * 페이지 테이블을 커널 가상 주소 매핑으로 채운 다음, CPU가 새 페이지 디렉터리(페이지 테이블 최상단 구조)를 사용하도록 설정한다.
+그리고 생성한 pml4에 대한 포인터를 base_pml4에 저장한다. */
 static void paging_init(uint64_t mem_end) {
     uint64_t *pml4, *pte;
     int perm;
@@ -173,10 +175,10 @@ static char **read_command_line(void) {
     int argc;
     int i;
 
-    argc = *(uint32_t *)ptov(LOADER_ARG_CNT);
+    argc = *(uint32_t *)ptov(LOADER_ARG_CNT); //물리주소를 가상주소로 바꾼값을 삽입
     p = ptov(LOADER_ARGS);
-    end = p + LOADER_ARGS_LEN;
-    for (i = 0; i < argc; i++) {
+    end = p + LOADER_ARGS_LEN; //128개+명령문 길이사이즈 설정
+    for (i = 0; i < argc; i++) { //arg가 128개보다 많은지 for문을 돌리면서 탐색
         if (p >= end)
             PANIC("command line arguments overflow");
 
@@ -188,7 +190,8 @@ static char **read_command_line(void) {
     /* Print kernel command line. */
     printf("Kernel command line:");
     for (i = 0; i < argc; i++)
-        if (strchr(argv[i], ' ') == NULL)
+        if (strchr(argv[i], ' ') == NULL)// strchr 문자열에서 문자에 대한 포인터 반환 ''== 공백, 공백 포인터반환
+                                        // strstr은 문자열에서 문자열을 찾기 ""==공백\n
             printf(" %s", argv[i]);
         else
             printf(" '%s'", argv[i]);
@@ -202,10 +205,11 @@ static char **read_command_line(void) {
 static char **parse_options(char **argv) {
     for (; *argv != NULL && **argv == '-'; argv++) {
         char *save_ptr;
-        char *name = strtok_r(*argv, "=", &save_ptr);
+        char *name = strtok_r(*argv, "=", &save_ptr);// c언어는 공백으로 문자열을 구분하고 싶을때 공백마다 \n을 삽입하여 문자열이 끝났다 하여
+                                                    // 그 값들을 저장하고 save_ptr에 공백 직후의 주소값을 저장해둠
         char *value = strtok_r(NULL, "", &save_ptr);
 
-        if (!strcmp(name, "-h"))
+        if (!strcmp(name, "-h"))//name이랑 -h가 완벽히 같은지 확인하려고 쓰는 것
             usage();
         else if (!strcmp(name, "-q"))
             power_off_when_done = true;
@@ -230,7 +234,7 @@ static char **parse_options(char **argv) {
     return argv;
 }
 
-/* Runs the task specified in ARGV[1]. */
+/* Runs the task specified in ARGV[1].->여기서 부터 보면 좋음 */
 static void run_task(char **argv) {
     const char *task = argv[1];
 
