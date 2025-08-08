@@ -18,6 +18,8 @@
 #include "userprog/process.h"
 #endif
 
+// #include "vm/vm.h" -> 이거 안 넣어도 되는건가?
+
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
@@ -108,6 +110,7 @@ static uint64_t gdt[3] = {0, 0x00af9a000000ffff, 0x00cf92000000ffff};
 
    It is not safe to call thread_current() until this function
    finishes. */
+// 스레드 모듈 자체를 초기화. 시스템 부팅 시 한 번만 실행.
 void thread_init(void) {
     ASSERT(intr_get_level() == INTR_OFF);
 
@@ -614,6 +617,8 @@ static void init_thread(struct thread *t, const char *name, int priority) {
 
 #endif
     // ADD/write_handler
+    // SPT 초기화, 프로세스별로 SPT를 가지고 있어야 하니까  init_thread에서 초기화
+    hash_init(&t->spt, page_hash, page_less, NULL);
 
     t->magic = THREAD_MAGIC;
 

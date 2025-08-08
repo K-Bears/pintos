@@ -6,16 +6,18 @@
  * UADDR must be below KERN_BASE.
  * Returns the byte value if successful, -1 if a segfault
  * occurred. */
+// 페이지 폴트를 userprog에 맞춰서 사용할 수 있도록.
 int64_t get_user(const uint8_t *uaddr) {
     int64_t result;
     __asm __volatile(
         "movabsq $done_get, %0\n"  // done_get 레이블의 주소를 result에 저장
         "movzbq %1, %0\n"  // *uaddr에서 1바이트를 읽어 %0 (result)에 저장. 세그폴트 발생 시 이 부분
                            // 건너뜀.
+                           // () 메모리 주소 접근
         "done_get:\n"  // (페이지 폴트 핸들러가 result를 -1로 설정하고 여기에 점프하도록 수정되어야
                        // 함)
         : "=&a"(result)
-        : "m"(*uaddr), "c"(uaddr));
+        : "m"(*uaddr), "c"(uaddr));  // rcx에 저장한다. rbx = callee / rax = caller
     return result;
 }
 
@@ -26,7 +28,7 @@ bool put_user(uint8_t *udst, uint8_t byte) {
     int64_t error_code;
     __asm __volatile(
         "movabsq $done_put, %0\n"  // done_put 레이블의 주소를 error_code에 저장
-        "movb %b2, %1\n"  // byte를 *udst에 쓴다. 세그폴트 발생 시 이 부분 건너뜀.
+        "movb %b2, %1\n"           // byte를 *udst에 쓴다. 세그폴트 발생 시 이 부분 건너뜀.
         "done_put:\n"  // (페이지 폴트 핸들러가 error_code를 -1로 설정하고 여기에 점프하도록
                        // 수정되어야 함)
         : "=&a"(error_code), "=m"(*udst)

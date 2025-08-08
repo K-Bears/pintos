@@ -47,11 +47,30 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 
     /* Check wheter the upage is already occupied or not. */
     if (spt_find_page(spt, upage) == NULL) {
-        /* TODO: Create the page, fetch the initialier according to the VM type,
+        /* TODO: Create the page, fetch the initializer according to the VM type,
          * TODO: and then create "uninit" page struct by calling uninit_new. You
          * TODO: should modify the field after calling the uninit_new. */
+        struct page *Page = palloc_get_page(PAL_USER);
+        if (Page == NULL) {
+            goto err;
+        } else {
+            void *initializer;
+            switch (type) {
+                case VM_ANON:
+                    initializer = anon_initializer;
+                    break;
+                case VM_FILE:
+                    initializer = file_backed_initializer;
+                default:
+                    break;
+            }
 
+            uninit_new(Page, upage, init, type, aux, initializer);
+        }
         /* TODO: Insert the page into the spt. */
+        hash_insert(&thread_current()->spt.table, &Page->hash_elem);
+
+        return true;
     }
 err:
     return false;
@@ -164,4 +183,15 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
     /* TODO: Destroy all the supplemental_page_table hold by thread and
      * TODO: writeback all the modified contents to the storage. */
+}
+
+unsigned page_hash(const struct hash_elem *p_, void *aux) {
+    const struct page *p = hash_entry(p_, struct page, hash_elem);
+    return hash_bytes(&p->va, sizeof p->va);
+}
+
+bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux) {
+    const struct page *a = hash_entry(a_, struct page, hash_elem);
+    const struct page *b = hash_entry(b_, struct page, hash_elem);
+    return a->va < b->va;
 }

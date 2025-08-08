@@ -195,12 +195,17 @@ void pml4_activate(uint64_t *pml4) {
  * address UADDR in pml4.  Returns the kernel virtual address
  * corresponding to that physical address, or a null pointer if
  * UADDR is unmapped. */
-void *pml4_get_page(uint64_t *pml4, const void *uaddr) {
+void *pml4_get_page(
+    uint64_t *pml4,
+    const void *uaddr) {  // 현재 프로세스의 페이지 테이블(최상위 레벨) / 유저 가상 주소
     ASSERT(is_user_vaddr(uaddr));
 
-    uint64_t *pte = pml4e_walk(pml4, (uint64_t)uaddr, 0);
+    uint64_t *pte =
+        pml4e_walk(pml4, (uint64_t)uaddr, 0);  // 물리 메모리의 "주소를 포함한 값"이 저장된 엔트리
 
-    if (pte && (*pte & PTE_P))
+    if (pte && (*pte & PTE_P))  // 페이지 테이블에 존재하지 않으면 pte == NULL / 존재하지만 아직
+                                // demading paging으로 물리 메모리에 없으면 *pte & PTE_P == 0
+                                // 물리 메모리에 있고 유효하면 둘 다 참
         return ptov(PTE_ADDR(*pte)) + pg_ofs(uaddr);
     return NULL;
 }
