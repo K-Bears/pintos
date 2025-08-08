@@ -5,6 +5,11 @@
 #include "threads/malloc.h"
 #include "vm/inspect.h"
 
+#include "threads/vaddr.h"
+#include "kernel/hash.h"
+
+static struct frame *frame_table;
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void vm_init(void) {
@@ -16,6 +21,11 @@ void vm_init(void) {
     register_inspect_intr();
     /* DO NOT MODIFY UPPER LINES. */
     /* TODO: Your code goes here. */
+    //필요한 페이지 수 계산
+    size_t n = (user_pages * sizeof(struct frame) + PGSIZE - 1 ) >> PGBITS;
+    frame_table = palloc_get_multiple(PAL_ZERO, n);
+
+    ASSERT(frame_table);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -101,8 +111,13 @@ static struct frame *vm_evict_frame(void) {
  * space.*/
 static struct frame *vm_get_frame(void) {
     struct frame *frame = NULL;
-    /* TODO: Fill this function. */
-
+    void *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+    if(kpage == NULL){
+        //TODO : swapping
+        ASSERT(kpage);
+    }
+    frame = &frame_table[pg_no(kpage) - pg_no(user_pool_base)];
+    frame->kva = kpage;
     ASSERT(frame != NULL);
     ASSERT(frame->page == NULL);
     return frame;
@@ -136,6 +151,10 @@ void vm_dealloc_page(struct page *page) {
 bool vm_claim_page(void *va UNUSED) {
     struct page *page = NULL;
     /* TODO: Fill this function */
+    struct page p;
+    p.va = va;
+    struct hash_elem *e = hash_find(&thread_current()->spt, p.hash_elem);
+    page = hash_entry(e,struct page, hash_elem);
 
     return vm_do_claim_page(page);
 }
@@ -149,7 +168,6 @@ static bool vm_do_claim_page(struct page *page) {
     page->frame = frame;
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
-
     return swap_in(page, frame->kva);
 }
 
