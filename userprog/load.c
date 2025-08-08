@@ -241,7 +241,7 @@ static inline struct File *load_file(const char *file_name, struct ELF *ehdr) {
                     if (phdr.p_filesz > 0) {
                         /* Normal segment.
                          * Read initial part from disk and zero the rest. */
-                        read_bytes = page_offset + phdr.p_filesz;  //
+                        read_bytes = page_offset + phdr.p_filesz;
                         zero_bytes = (ROUND_UP(page_offset + phdr.p_memsz, PGSIZE) - read_bytes);
                     } else {
                         /* Entirely zero.
@@ -359,6 +359,7 @@ static bool validate_segment(const struct Phdr *phdr, struct file *file) {
        could quite likely panic the kernel by way of null pointer
        assertions in memcpy(), etc. */
     if (phdr->p_vaddr < PGSIZE)  // 확인
+
         return false;
 
     /* It's okay. */
@@ -456,7 +457,6 @@ static bool lazy_load_segment(struct page *page, void *aux) {
     /* TODO: Load the segment from the file */
     /* TODO: This called when the first page fault occurs on address VA. */
     /* TODO: VA is available when calling this function. */
-
     struct file_meta *fm = aux;
     bool success = false;
 
@@ -518,7 +518,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 
         void *aux = NULL;
         aux = &file_meta;
-
+      
         if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux))
             return false;
 

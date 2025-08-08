@@ -72,12 +72,16 @@ uint64_t *push_stack(char *arg, size_t size, struct intr_frame *if_) {
         page_bottom -= PGSIZE;
         uint8_t *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
         if (kpage != NULL) {
+            #ifndef VM
             if (!install_page((void *)page_bottom, kpage, true)) {
                 palloc_free_page(kpage);
                 page_bottom += PGSIZE;
                 alloc_fail = true;
                 break;
             }
+            #else
+            //TODO : vm
+            #endif
         }
     }
 
@@ -178,6 +182,7 @@ bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
     memcpy(newpage, parent_page, PGSIZE);
 
     // 자식의 페이지 테이블에 해당 가상 주소를 새 페이지로 매핑
+
     if (!pml4_set_page(current->pml4, va, newpage, writable)) {
         palloc_free_page(newpage);
         return false;
