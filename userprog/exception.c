@@ -124,7 +124,7 @@ static void page_fault(struct intr_frame *f) {
        data.  It is not necessarily the address of the instruction
        that caused the fault (that's f->rip). */
 
-    fault_addr = (void *)rcr2();
+    fault_addr = (void *)rcr2();  // MMU가 작성
 
     /* Turn interrupts back on (they were only off so that we could
        be assured of reading CR2 before it changed). */

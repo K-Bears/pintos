@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include "vm/vm_type.h"
 
+#include "kernel/hash.h"
 #include "threads/palloc.h"
 
 #include "vm/uninit.h"
@@ -17,11 +18,15 @@ struct thread;
 
 #define VM_TYPE(type) ((type) & 7)
 
+unsigned page_hash(const struct hash_elem *p_, void *aux);
+bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux);
+
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
  * uninit_page, file_page, anon_page, and page cache (project4).
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page {
+    struct hash_elem hash_elem;
     const struct page_operations *operations;
     void *va;            /* Address in terms of user space */
     struct frame *frame; /* Back reference for frame */
@@ -66,7 +71,9 @@ struct page_operations {
 /* Representation of current process's memory space.
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
-struct supplemental_page_table {};
+struct supplemental_page_table {
+    struct hash table;
+};
 
 #include "threads/thread.h"
 void supplemental_page_table_init(struct supplemental_page_table *spt);

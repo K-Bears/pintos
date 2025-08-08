@@ -358,7 +358,8 @@ static bool validate_segment(const struct Phdr *phdr, struct file *file) {
        it then user code that passed a null pointer to system calls
        could quite likely panic the kernel by way of null pointer
        assertions in memcpy(), etc. */
-    if (phdr->p_vaddr < PGSIZE)
+    if (phdr->p_vaddr < PGSIZE)  // 확인
+
         return false;
 
     /* It's okay. */
@@ -443,10 +444,41 @@ static bool setup_stack(struct intr_frame *if_) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
+static struct file_meta {
+    struct file *file;
+    off_t ofs;
+    uint32_t read_bytes;
+    uint32_t zero_bytes;
+    bool writable;
+};
+
+/* 레이지 로딩을 구현하기 위해서는 한 페이지씩만 로드해야 함 ? */
 static bool lazy_load_segment(struct page *page, void *aux) {
     /* TODO: Load the segment from the file */
     /* TODO: This called when the first page fault occurs on address VA. */
     /* TODO: VA is available when calling this function. */
+    struct file_meta *fm = aux;
+    bool success = false;
+
+    /* 2) 디스크에서 읽기 (fm->ofs 위치에서만) */
+    if (file_read_at(fm->file, page->frame->kva, fm->read_bytes, fm->ofs) != (int)fm->read_bytes)
+        goto done;
+
+    /* 3) 페이지 테이블에 매핑 */
+    if (!pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, fm->writable))
+        goto done;
+
+    success = true;
+
+done:
+    /* 4) 실패 시 할당 해제 */
+    if (!success && page->frame->kva) {
+        palloc_free_page(page->frame->kva);
+        page->frame = NULL;
+    }
+    /* 5) 메타데이터 해제 */
+    free(fm);
+    return success;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -477,7 +509,16 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         /* TODO: Set up aux to pass information to the lazy_load_segment. */
+        struct file_meta *file_meta = malloc(sizeof *file_meta);  // malloc으로 생성, pop 시 사라짐
+        file_meta->file = file;
+        file_meta->ofs = ofs;
+        file_meta->read_bytes = read_bytes;
+        file_meta->zero_bytes = zero_bytes;
+        file_meta->writable = writable;
+
         void *aux = NULL;
+        aux = &file_meta;
+      
         if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux))
             return false;
 
@@ -485,6 +526,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
         upage += PGSIZE;
+        ofs += page_read_bytes;
     }
     return true;
 }

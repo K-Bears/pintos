@@ -157,27 +157,37 @@ bool duplicate_pte(uint64_t *pte, void *va, void *aux) {
     void *newpage;
     bool writable;
 
+    // 사용자 영역 주소인지 확인
     if (!is_user_vaddr(va)) {
-        return true;
+        return true;  // 커널 영역은 복사하지 않음
     }
 
+    // 부모의 페이지 테이블에서 va에 해당하는 물리 페이지 가져오기
     parent_page = pml4_get_page(parent->pml4, va);
 
+    // 자식의 페이지 테이블에 이미 매핑된 페이지가 있다면, 제거해줌
     if ((newpage = pml4_get_page(current->pml4, va)) != NULL) {
-        palloc_free_page(newpage);
-    }
-    newpage = palloc_get_page(PAL_USER | PAL_ZERO);
-    if (newpage == NULL) {
-        return false;
+        palloc_free_page(newpage);  // 기존 페이지 메모리 해제
     }
 
+    // 새로운 물리 페이지를 할당 (자식의 가상 주소에 연결할 새 물리 페이지)
+    newpage = palloc_get_page(PAL_USER | PAL_ZERO);
+    if (newpage == NULL) {
+        return false;  // 페이지 할당 실패
+    }
+
+    // 복사할 페이지가 쓰기 가능한 페이지인지 확인
     writable = is_writable(pte);
+    // 부모 페이지의 데이터를 자식의 새 페이지에 복사 (페이지 내용 복제)
     memcpy(newpage, parent_page, PGSIZE);
+
+    // 자식의 페이지 테이블에 해당 가상 주소를 새 페이지로 매핑
 
     if (!pml4_set_page(current->pml4, va, newpage, writable)) {
         palloc_free_page(newpage);
         return false;
     }
+
     return true;
 }
 
