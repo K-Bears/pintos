@@ -13,6 +13,10 @@
 #include "userprog/process.h"
 #include "userprog/process_impl.h"
 
+#ifdef VM
+#include "vm/vm.h"
+#endif
+
 // vm 때 include 오류나면 해제할 것
 //  #include "filesys/directory.h"
 //  #include "filesys/file.h"
@@ -512,12 +516,12 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         struct file_meta *file_meta = malloc(sizeof *file_meta);  // malloc으로 생성, pop 시 사라짐
         file_meta->file = file;
         file_meta->ofs = ofs;
-        file_meta->read_bytes = read_bytes;
-        file_meta->zero_bytes = zero_bytes;
+        file_meta->read_bytes = page_read_bytes;
+        file_meta->zero_bytes = page_zero_bytes;
         file_meta->writable = writable;
 
         void *aux = NULL;
-        aux = &file_meta;
+        aux = file_meta;
       
         if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux))
             return false;
@@ -540,6 +544,12 @@ static bool setup_stack(struct intr_frame *if_) {
      * TODO: If success, set the rsp accordingly.
      * TODO: You should mark the page is stack. */
     /* TODO: Your code goes here */
+    if(vm_alloc_page_with_initializer(VM_ANON, stack_bottom, true, anon_initializer, NULL)){
+        success = vm_claim_page(stack_bottom);
+        if(success){
+            if_->rsp = USER_STACK;
+        }
+    }
 
     return success;
 }

@@ -4,8 +4,8 @@
 
 #include "threads/malloc.h"
 #include "vm/inspect.h"
-
 #include "threads/vaddr.h"
+#include "threads/mmu.h"
 #include "kernel/hash.h"
 
 static struct frame *frame_table;
@@ -76,6 +76,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
             }
 
             uninit_new(Page, upage, init, type, aux, initializer);
+            Page->writable = writable;
         }
         /* TODO: Insert the page into the spt. */
         hash_insert(&thread_current()->spt.table, &Page->hash_elem);
@@ -151,12 +152,12 @@ static bool vm_handle_wp(struct page *page UNUSED) {}
 /* Return true on success */
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool user UNUSED,
                          bool write UNUSED, bool not_present UNUSED) {
-    struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
-    struct page *page = NULL;
+    // struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
+    // struct page *page = NULL;
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
 
-    return vm_do_claim_page(page);
+    return vm_claim_page(pg_round_down(addr));
 }
 
 /* Free the page.
@@ -172,7 +173,7 @@ bool vm_claim_page(void *va UNUSED) {
     /* TODO: Fill this function */
     struct page p;
     p.va = va;
-    struct hash_elem *e = hash_find(&thread_current()->spt, p.hash_elem);
+    struct hash_elem *e = hash_find(&thread_current()->spt, &p.hash_elem);
     page = hash_entry(e,struct page, hash_elem);
 
     return vm_do_claim_page(page);
@@ -187,6 +188,18 @@ static bool vm_do_claim_page(struct page *page) {
     page->frame = frame;
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
+    switch (page_get_type(page))
+    {
+    case VM_ANON:
+        if(!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable)){
+            return false;
+        }
+        break;
+    case VM_FILE:
+        break;
+    default:
+        break;
+    }
     return swap_in(page, frame->kva);
 }
 
