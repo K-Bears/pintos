@@ -40,6 +40,9 @@ static struct pool kernel_pool, user_pool;
 
 /* Maximum number of pages to put in user pool. */
 size_t user_page_limit = SIZE_MAX;
+
+size_t user_pages = 0;
+uintptr_t user_pool_base;
 static void init_pool(struct pool *p, void **bm_base, uint64_t start, uint64_t end);
 
 static bool page_from_pool(const struct pool *, void *page);
@@ -124,7 +127,7 @@ static void populate_pools(struct area *base_mem, struct area *ext_mem) {
     void *free_start = pg_round_up(&_end);
 
     uint64_t total_pages = (base_mem->size + ext_mem->size) / PGSIZE;
-    uint64_t user_pages = total_pages / 2 > user_page_limit ? user_page_limit : total_pages / 2;
+    user_pages = total_pages / 2 > user_page_limit ? user_page_limit : total_pages / 2;
     uint64_t kern_pages = total_pages - user_pages;
 
     // Parse E820 map to claim the memory region for each pool.
@@ -186,6 +189,7 @@ static void populate_pools(struct area *base_mem, struct area *ext_mem) {
 
     // generate the user pool
     init_pool(&user_pool, &free_start, region_start, end);
+    user_pool_base = user_pool.base;
 
     // Iterate over the e820_entry. Setup the usable.
     uint64_t usable_bound = (uint64_t)free_start;

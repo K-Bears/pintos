@@ -224,6 +224,8 @@ tid_t thread_create(const char *name, int priority, thread_func *function, void 
         return -1;
     }
 
+    hash_init(&t->spt, page_hash, page_less, NULL);
+
     /* Add to run queue. */
     thread_unblock(t);
 
@@ -621,7 +623,6 @@ static void init_thread(struct thread *t, const char *name, int priority) {
 #endif
     // ADD/write_handler
     // SPT 초기화, 프로세스별로 SPT를 가지고 있어야 하니까  init_thread에서 초기화
-    hash_init(&t->spt, page_hash, page_less, NULL);
 
     t->magic = THREAD_MAGIC;
 
