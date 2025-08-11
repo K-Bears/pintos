@@ -1,14 +1,13 @@
 #ifndef VM_VM_H
 #define VM_VM_H
 #include <stdbool.h>
-#include "vm/vm_type.h"
 
 #include "kernel/hash.h"
 #include "threads/palloc.h"
-
-#include "vm/uninit.h"
 #include "vm/anon.h"
 #include "vm/file.h"
+#include "vm/uninit.h"
+#include "vm/vm_type.h"
 #ifdef EFILESYS
 #include "filesys/page_cache.h"
 #endif
@@ -18,6 +17,7 @@ struct thread;
 
 #define VM_TYPE(type) ((type) & 7)
 
+void page_delete(struct hash_elem *e, void *aux);
 unsigned page_hash(const struct hash_elem *p_, void *aux);
 bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux);
 
@@ -33,6 +33,7 @@ struct page {
     /* Your implementation */
     bool writable;
     struct hash_elem hash_elem;
+    uint64_t *pte;
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
     union {
@@ -49,6 +50,7 @@ struct page {
 struct frame {
     void *kva;
     struct page *page;
+    bool avoid_swap;
 };
 
 /* The function table for page operations.

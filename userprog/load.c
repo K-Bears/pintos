@@ -449,6 +449,7 @@ static bool setup_stack(struct intr_frame *if_) {
  * upper block. */
 
 static struct file_meta {
+    size_t struct_size;
     struct file *file;
     off_t ofs;
     uint32_t read_bytes;
@@ -458,9 +459,9 @@ static struct file_meta {
 
 /* 레이지 로딩을 구현하기 위해서는 한 페이지씩만 로드해야 함 ? */
 static bool lazy_load_segment(struct page *page, void *aux) {
-    /* TODO: Load the segment from the file */
-    /* TODO: This called when the first page fault occurs on address VA. */
-    /* TODO: VA is available when calling this function. */
+    /* Load the segment from the file */
+    /* This called when the first page fault occurs on address VA. */
+    /* VA is available when calling this function. */
     struct file_meta *fm = aux;
     bool success = false;
 
@@ -512,8 +513,9 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-        /* TODO: Set up aux to pass information to the lazy_load_segment. */
+        /* Set up aux to pass information to the lazy_load_segment. */
         struct file_meta *file_meta = malloc(sizeof *file_meta);  // malloc으로 생성, pop 시 사라짐
+        file_meta->struct_size = sizeof(struct file_meta);
         file_meta->file = file;
         file_meta->ofs = ofs;
         file_meta->read_bytes = page_read_bytes;
@@ -522,7 +524,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 
         void *aux = NULL;
         aux = file_meta;
-      
+
         if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux))
             return false;
 
@@ -540,13 +542,13 @@ static bool setup_stack(struct intr_frame *if_) {
     bool success = false;
     void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
-    /* TODO: Map the stack on stack_bottom and claim the page immediately.
-     * TODO: If success, set the rsp accordingly.
-     * TODO: You should mark the page is stack. */
-    /* TODO: Your code goes here */
-    if(vm_alloc_page_with_initializer(VM_ANON, stack_bottom, true, anon_initializer, NULL)){
+    /* Map the stack on stack_bottom and claim the page immediately.
+     * If success, set the rsp accordingly.
+     * You should mark the page is stack. */
+    /* Your code goes here */
+    if (vm_alloc_page(VM_ANON, stack_bottom, true)) {
         success = vm_claim_page(stack_bottom);
-        if(success){
+        if (success) {
             if_->rsp = USER_STACK;
         }
     }

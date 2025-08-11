@@ -3,8 +3,11 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "userprog/check_perm.h"
 #include "userprog/file_abstract.h"
+
+// #ifndef VM
+#include "userprog/check_perm.h"
+// #endif
 
 static int _extend_fdt(struct thread *t, size_t n);
 static int _set_fd(struct File *file, struct thread *t);

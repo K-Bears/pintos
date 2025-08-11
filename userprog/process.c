@@ -38,7 +38,8 @@ struct init_data {
 
 /* General process initializer for initd and other process. */
 static void process_init(void) {
-    // struct thread *current = thread_current();
+    struct thread *current = thread_current();
+    supplemental_page_table_init(&current->spt);
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -184,7 +185,7 @@ static void __do_fork(void *aux) {
     process_activate(current);
 
 #ifdef VM
-    supplemental_page_table_init(&current->spt);
+    process_init();
     if (!supplemental_page_table_copy(&current->spt, &parent->spt))
         goto error;
 #else
@@ -202,8 +203,6 @@ static void __do_fork(void *aux) {
     if (fork_fdt(parent, current) == -1) {
         goto error;
     }
-
-    process_init();
 
     free(fork_data);
     if_.R.rax = 0;  // 자식 rax 초기화
@@ -239,6 +238,8 @@ int process_exec(void *f_name) {
 
     /* We first kill the current context */
     process_cleanup();
+
+    process_init();
 
     /* And then load the binary */
     success = load(file_name, args, &_if);

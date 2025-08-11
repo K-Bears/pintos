@@ -137,6 +137,9 @@ static void page_fault(struct intr_frame *f) {
 
 #ifdef VM
     /* For project 3 and later. */
+    if (user) {
+        thread_current()->saved_user_rsp = f->rsp;
+    }
     if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
         return;
 #endif
@@ -144,17 +147,17 @@ static void page_fault(struct intr_frame *f) {
     /* Count page faults. */
     page_fault_cnt++;
 
-    /* If the fault is true fault, show info and exit. */
-    //  printf("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
-    //         not_present ? "not present" : "rights violation", write ? "writing" : "reading",
-    //         user ? "user" : "kernel");
+/* If the fault is true fault, show info and exit. */
+//  printf("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
+//         not_present ? "not present" : "rights violation", write ? "writing" : "reading",
+//         user ? "user" : "kernel");
 
-    // FIXME :  vm할떄는 고칠 것, userprog 할 때 MMU 활용하기 위해 임시로 만듦
+// FIXME :  vm할떄는 고칠 것, userprog 할 때 MMU 활용하기 위해 임시로 만듦
+#ifndef VM
     if (f->R.rcx == fault_addr) {
         f->rip = f->R.rax;
         f->R.rax = -1;
-    } else {
-        f->R.rax = -1;
-        kill(f);
     }
+#endif
+    kill(f);
 }

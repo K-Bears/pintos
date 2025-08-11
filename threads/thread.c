@@ -224,8 +224,6 @@ tid_t thread_create(const char *name, int priority, thread_func *function, void 
         return -1;
     }
 
-    hash_init(&t->spt, page_hash, page_less, NULL);
-
     /* Add to run queue. */
     thread_unblock(t);
 

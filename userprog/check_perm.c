@@ -2,6 +2,8 @@
 
 #include "threads/vaddr.h"
 
+// #ifndef VM
+
 /* Reads a byte at user virtual address UADDR.
  * UADDR must be below KERN_BASE.
  * Returns the byte value if successful, -1 if a segfault
@@ -28,7 +30,7 @@ bool put_user(uint8_t *udst, uint8_t byte) {
     int64_t error_code;
     __asm __volatile(
         "movabsq $done_put, %0\n"  // done_put 레이블의 주소를 error_code에 저장
-        "movb %b2, %1\n"           // byte를 *udst에 쓴다. 세그폴트 발생 시 이 부분 건너뜀.
+        "movb %b2, %1\n"  // byte를 *udst에 쓴다. 세그폴트 발생 시 이 부분 건너뜀.
         "done_put:\n"  // (페이지 폴트 핸들러가 error_code를 -1로 설정하고 여기에 점프하도록
                        // 수정되어야 함)
         : "=&a"(error_code), "=m"(*udst)
@@ -83,6 +85,15 @@ bool is_user_accesable(void *start, size_t size, enum pointer_check_flags flag) 
         if (ptr > end) {
             ptr = end;
         }
+    }
+    return true;
+}
+
+// #endif
+
+bool check_user_addr_valid(uintptr_t uaddr) {
+    if (uaddr < 0x1000 || is_kernel_vaddr(uaddr)) {
+        return false;
     }
     return true;
 }
