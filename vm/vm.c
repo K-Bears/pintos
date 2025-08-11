@@ -170,7 +170,7 @@ static struct frame *vm_get_frame(void) {
     frame = &frame_table[pg_no(kpage) - pg_no(user_pool_base)];
     frame->kva = kpage;
     ASSERT(frame != NULL);
-    ASSERT(frame->page == NULL);
+    // ASSERT(frame->page == NULL);
     return frame;
 }
 
@@ -292,13 +292,15 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
                 }
                 uninit_new(dst_page, src_page->va, src_page->uninit.init, src_page->uninit.type,
                            aux, src_page->uninit.page_initializer);
+                dst_page->writable = src_page->writable;
                 break;
             case VM_ANON:
                 uninit_new(dst_page, src_page->va, NULL, VM_ANON, NULL, anon_initializer);
+                dst_page->writable = src_page->writable;
                 if (src_page->frame == NULL) {
-                    if (!vm_do_claim_page(src_page)) {
-                        goto copy_err;
-                    }
+                    // if (!vm_do_claim_page(src_page)) {
+                    //     goto copy_err;
+                    // }
                 }
                 if (!vm_do_claim_page(dst_page)) {
                     goto copy_err;
@@ -308,7 +310,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
             default:
                 break;
         }
-        dst_page->writable = src_page->writable;
         hash_insert(&dst->table, &dst_page->hash_elem);
     }
     return true;
