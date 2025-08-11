@@ -2,13 +2,13 @@
 
 #include "vm/vm.h"
 
-#include "threads/malloc.h"
-#include "vm/inspect.h"
-#include "threads/vaddr.h"
-#include "threads/mmu.h"
 #include "kernel/hash.h"
+#include "threads/malloc.h"
+#include "threads/mmu.h"
+#include "threads/vaddr.h"
+#include "vm/inspect.h"
 
-static struct frame *frame_table;
+static struct frame *frame_table;  // 프레임 테이블
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -21,9 +21,9 @@ void vm_init(void) {
     register_inspect_intr();
     /* DO NOT MODIFY UPPER LINES. */
     /* TODO: Your code goes here. */
-    //필요한 페이지 수 계산
-    size_t n = (user_pages * sizeof(struct frame) + PGSIZE - 1 ) >> PGBITS;
-    frame_table = palloc_get_multiple(PAL_ZERO, n);
+    // 필요한 페이지 수 계산
+    size_t n = (user_pages * sizeof(struct frame) + PGSIZE - 1) >> PGBITS;  // user_pool 페이지 개수
+    frame_table = palloc_get_multiple(PAL_ZERO, n);                         // 프레임 테이블 초기화
 
     ASSERT(frame_table);
 }
@@ -60,7 +60,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
         /* TODO: Create the page, fetch the initializer according to the VM type,
          * TODO: and then create "uninit" page struct by calling uninit_new. You
          * TODO: should modify the field after calling the uninit_new. */
-        struct page *Page = palloc_get_page(PAL_USER);
+        struct page *Page = palloc_get_page(PAL_USER);  // malloc 충분. malloc으로 수정
         if (Page == NULL) {
             goto err;
         } else {
@@ -91,8 +91,18 @@ err:
 struct page *spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
     struct page *page = NULL;
     /* TODO: Fill this function. */
+    if (spt == NULL || va == NULL)
+        return NULL;
 
-    return page;
+    void *uva = pg_round_down(va);  // 주소를 round_down하는 이유 ?
+
+    struct page key;
+    key.va = uva;
+    struct hash_elem *e = hash_find(&spt->table, &key.hash_elem);
+    if (e == NULL)
+        return NULL;
+
+    return hash_entry(e, struct page, hash_elem);
 }
 
 /* Insert PAGE into spt with validation. */
@@ -132,8 +142,8 @@ static struct frame *vm_evict_frame(void) {
 static struct frame *vm_get_frame(void) {
     struct frame *frame = NULL;
     void *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-    if(kpage == NULL){
-        //TODO : swapping
+    if (kpage == NULL) {
+        // TODO : swapping
         ASSERT(kpage);
     }
     frame = &frame_table[pg_no(kpage) - pg_no(user_pool_base)];
@@ -144,7 +154,11 @@ static struct frame *vm_get_frame(void) {
 }
 
 /* Growing the stack. */
-static void vm_stack_growth(void *addr UNUSED) {}
+static void vm_stack_growth(void *addr UNUSED) {
+    // addr이 더 이상 페이지 폴트를 일으키지 않도록 하나 이상의 익명 페이지를 할당해야 함.
+    // 이 때 addr을 페이지 크기(PGSIZE) 단위로 내림 처리해야 함.
+    vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
+}
 
 /* Handle the fault on write_protected page */
 static bool vm_handle_wp(struct page *page UNUSED) {}
@@ -152,12 +166,43 @@ static bool vm_handle_wp(struct page *page UNUSED) {}
 /* Return true on success */
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool user UNUSED,
                          bool write UNUSED, bool not_present UNUSED) {
-    // struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
-    // struct page *page = NULL;
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
 
-    return vm_claim_page(pg_round_down(addr));
+    // spt에 엔트리가 존재하는지 확인
+    // 페이지 폴트가 스택 증가로 처리할 수 있는 유효한 경우인지 검사.
+    // 스택 증가가 유효하면,  vm_stack_growth(addr)를 호출해서 추가 페이지를 할당.
+    struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
+    struct page *page = NULL;
+    if (addr == NULL)
+        return false;
+
+    if (is_kernel_vaddr(addr))
+        return false;
+
+    if (not_present)  // 접근한 메모리의 physical page가 존재하지 않은 경우
+    {
+        /* TODO: Validate the fault */
+        // 페이지 폴트가 스택 확장에 대한 유효한 경우인지를 확인한다.
+        void *rsp = f->rsp;  // user access인 경우 rsp는 유저 stack을 가리킨다.
+        if (!user)           // kernel access인 경우 thread에서 rsp를 가져와야 한다.
+            rsp = thread_current()->rsp;
+
+        // 스택 확장으로 처리할 수 있는 폴트인 경우, vm_stack_growth를 호출한다.
+        // push가 되는 경우, 레지터스의 최대 크기 만큼 rps에 push된다.
+        if (USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK)
+            vm_stack_growth(addr);
+        else if (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK)
+            vm_stack_growth(addr);
+
+        page = spt_find_page(spt, addr);
+        if (page == NULL)
+            return false;
+        if (write == 1 && page->writable == 0)  // write 불가능한 페이지에 write 요청한 경우
+            return false;
+        return vm_do_claim_page(page);
+    }
+    return false;
 }
 
 /* Free the page.
@@ -174,37 +219,39 @@ bool vm_claim_page(void *va UNUSED) {
     struct page p;
     p.va = va;
     struct hash_elem *e = hash_find(&thread_current()->spt, &p.hash_elem);
-    page = hash_entry(e,struct page, hash_elem);
+    page = hash_entry(e, struct page, hash_elem);
 
     return vm_do_claim_page(page);
 }
 
 /* Claim the PAGE and set up the mmu. */
 static bool vm_do_claim_page(struct page *page) {
-    struct frame *frame = vm_get_frame();
+    struct frame *frame = vm_get_frame();  // swap 구현
 
     /* Set links */
     frame->page = page;
     page->frame = frame;
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
-    switch (page_get_type(page))
-    {
-    case VM_ANON:
-        if(!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable)){
-            return false;
-        }
-        break;
-    case VM_FILE:
-        break;
-    default:
-        break;
+    switch (page_get_type(page)) {
+        case VM_ANON:
+            if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable)) {
+                return false;
+            }
+            break;
+        case VM_FILE:
+            break;
+        default:
+            break;
     }
     return swap_in(page, frame->kva);
 }
 
 /* Initialize new supplemental page table */
-void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {}
+void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
+    ASSERT(spt != NULL);
+    hash_init(spt, page_hash, page_less, NULL);
+}
 
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
