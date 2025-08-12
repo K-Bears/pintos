@@ -12,6 +12,6 @@ struct anon_page {
 
 void vm_anon_init(void);
 bool anon_initializer(struct page *page, enum vm_type type, void *kva);
-bool duplicate_swap_slot(struct page *dst_page, struct page *src_page);
+bool copy_anon_page(struct hash *hash, struct page *dst_page, struct page *src_page);
 
 #endif

@@ -14,6 +14,7 @@ static struct disk *swap_disk;
 static bool anon_swap_in(struct page *page, void *kva);
 static bool anon_swap_out(struct page *page);
 static void anon_destroy(struct page *page);
+static void free_swap(size_t swap_slot);
 
 /* DO NOT MODIFY this struct */
 static const struct page_operations anon_ops = {
@@ -53,9 +54,9 @@ static bool anon_swap_in(struct page *page, void *kva) {
     if (!anon_page->alloc_swap) {
         return false;
     }
-
+    anon_page->alloc_swap = false;
     read_swap_page(anon_page->swap_slot, page->frame->kva, PGSIZE);
-    bitmap_set_multiple(swap_table, swap_table, 1, false);
+    free_swap(anon_page->swap_slot);
 }
 
 /* Swap out the page by writing contents to the swap disk. */
@@ -65,6 +66,7 @@ static bool anon_swap_out(struct page *page) {
         return false;
     }
     struct anon_page *anon_page = &page->anon;
+    anon_page->alloc_swap = true;
     anon_page->swap_slot = swap_slot;
     write_swap_page(anon_page->swap_slot, page->frame->kva, PGSIZE);
     page->frame = NULL;
@@ -75,6 +77,9 @@ static bool anon_swap_out(struct page *page) {
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
 static void anon_destroy(struct page *page) {
     struct anon_page *anon_page = &page->anon;
+    if (anon_page->alloc_swap) {
+        free_swap(anon_page->swap_slot);
+    }
 }
 
 static bool read_swap_page(size_t swap_slot, char *buffer, size_t size) {
@@ -104,20 +109,21 @@ static size_t alloc_swap_slot(void) {
     return swap_slot;
 }
 
-bool duplicate_swap_slot(struct page *dst_page, struct page *src_page) {
-    char *buffer = palloc_get_page(0);
-    if (buffer == NULL) {
+bool copy_anon_page(struct hash *hash, struct page *dst_page, struct page *src_page) {
+    uninit_new(dst_page, src_page->va, NULL, VM_ANON, NULL, anon_initializer);
+    dst_page->writable = src_page->writable;
+    hash_insert(hash, &dst_page->hash_elem);
+    if (!vm_claim_page(dst_page->va)) {
         return false;
     }
-    read_swap_page(src_page->anon.swap_slot, buffer, PGSIZE);
-    size_t swap_slot = alloc_swap_slot();
-    if (swap_slot == BITMAP_ERROR) {
-        palloc_free_page(buffer);
-        return false;
+    if (src_page->anon.alloc_swap) {
+        read_swap_page(src_page->anon.swap_slot, dst_page->frame->kva, PGSIZE);
+    } else {
+        memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
     }
-    write_swap_page(swap_slot, buffer, PGSIZE);
-    dst_page->anon.alloc_swap = true;
-    dst_page->anon.swap_slot = swap_slot;
-    palloc_free_page(buffer);
     return true;
+}
+
+static void free_swap(size_t swap_slot) {
+    bitmap_set_multiple(swap_table, swap_slot, 1, false);
 }

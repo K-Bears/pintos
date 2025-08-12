@@ -280,6 +280,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
         if ((dst_page = malloc(sizeof(struct page))) == NULL) {
             return false;
         }
+
         switch (src_page->operations->type) {
             case VM_UNINIT:
                 void *aux = NULL;
@@ -293,28 +294,19 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
                 uninit_new(dst_page, src_page->va, src_page->uninit.init, src_page->uninit.type,
                            aux, src_page->uninit.page_initializer);
                 dst_page->writable = src_page->writable;
+                hash_insert(&dst->table, &dst_page->hash_elem);
                 break;
             case VM_ANON:
-                uninit_new(dst_page, src_page->va, NULL, VM_ANON, NULL, anon_initializer);
-                dst_page->writable = src_page->writable;
-                if (src_page->frame == NULL) {
-                    // if (!vm_do_claim_page(src_page)) {
-                    //     goto copy_err;
-                    // }
-                }
-                if (!vm_do_claim_page(dst_page)) {
+                if (!copy_anon_page(&dst->table, dst_page, src_page)) {
                     goto copy_err;
                 }
-                memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
                 break;
             default:
                 break;
         }
-        hash_insert(&dst->table, &dst_page->hash_elem);
     }
     return true;
 copy_err:
-    free(dst_page);
     return false;
 }
 

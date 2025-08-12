@@ -4,8 +4,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// #ifndef VM
-
 /* check_perm.h의 내용은 이곳에 작성하세요 */
 enum pointer_check_flags {
     P_KERNEL = 0b0, /* kernel addr */
@@ -17,8 +15,6 @@ enum pointer_check_flags {
 int64_t get_user(const uint8_t *uaddr);
 bool put_user(uint8_t *udst, uint8_t byte);
 bool is_user_accesable(void *start, size_t size, enum pointer_check_flags flag);
-
-// #endif
 
 bool check_user_addr_valid(uintptr_t uaddr);
 

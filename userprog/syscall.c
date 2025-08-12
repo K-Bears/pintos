@@ -12,14 +12,11 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "user/syscall.h"
+#include "userprog/check_perm.h"
 #include "userprog/file_abstract.h"
 #include "userprog/file_descriptor.h"
 #include "userprog/gdt.h"
 #include "userprog/process.h"
-
-#ifndef VM
-#include "userprog/check_perm.h"
-#endif
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -67,7 +64,6 @@ void syscall_init(void) {
 
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f) {
-    // TODO: Your implementation goes here.
     int syscall_num = f->R.rax;
 
     // thread_current()->saved_user_rsp = f->rsp;
@@ -161,21 +157,17 @@ static void exit_handler(int status) {
  * @see process_fork()
  */
 static pid_t fork_handler(const char *thread_name, struct intr_frame *f) {
-#ifndef VM
     if (!is_user_accesable(thread_name, 0, P_USER | IS_STR)) {
         exit_handler(-1);
     }
-#endif
     return process_fork(thread_name, f);
 }
 
 /* 사용자 프로그램 실행 */
 static int exec_handler(const char *file) {
-#ifndef VM
     if (!is_user_accesable(file, 0, P_USER)) {
         exit_handler(-1);
     }
-#endif
     char *fn_copy = palloc_get_page(0);
     if (fn_copy) {
         strlcpy(fn_copy, file, PGSIZE);
@@ -190,11 +182,9 @@ static int wait_handler(pid_t pid) {
 
 /* 파일 생성 */
 static bool create_handler(const char *file, unsigned initial_size) {
-#ifndef VM
     if (!is_user_accesable(file, 0, P_USER | IS_STR)) {
         exit_handler(-1);
     }
-#endif
     return filesys_create(file, initial_size);
     NOT_REACHED();
     return false;
@@ -202,11 +192,9 @@ static bool create_handler(const char *file, unsigned initial_size) {
 
 /* 파일 삭제 */
 static bool remove_handler(const char *file) {
-#ifndef VM
     if (!is_user_accesable(file, 0, P_USER | IS_STR)) {
         exit_handler(-1);
     }
-#endif
     return filesys_remove(file);
     NOT_REACHED();
     return false;
@@ -214,11 +202,9 @@ static bool remove_handler(const char *file) {
 
 /* 파일 열기 */
 static int open_handler(const char *file_name) {
-#ifndef VM
     if (!(file_name && is_user_accesable(file_name, 0, P_USER | IS_STR))) {
         exit_handler(-1);
     }
-#endif
     struct File *file = open_file(file_name);
     if (file == NULL) {
         return -1;
@@ -243,11 +229,10 @@ static int filesize_handler(int fd) {
 static int read_handler(int fd, void *buffer, unsigned size) {
     struct File *get_file = get_file_from_fd(fd);
     int result = -1;
-#ifndef VM
+
     if (!(get_file != NULL && is_user_accesable(buffer, size, P_USER | P_WRITE))) {
         exit_handler(-1);
     }
-#endif
     result = read_file(get_file, buffer, size);
     if (result == -1) {
         exit_handler(-1);
@@ -277,13 +262,10 @@ static int read_handler(int fd, void *buffer, unsigned size) {
  */
 static int write_handler(int fd, const void *buffer,
                          unsigned size) {  // write의 목적은 buf를 fd에 쓰기해주는 함수
-
-#ifndef VM
+    struct File *get_file = get_file_from_fd(fd);
     if (!(get_file != NULL && is_user_accesable(buffer, size, P_USER))) {
         exit_handler(-1);
     }
-#endif
-    struct File *get_file = get_file_from_fd(fd);
     int result = write_file(get_file, buffer, size);
     if (result == -1) {
         exit_handler(-1);

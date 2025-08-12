@@ -1,8 +1,8 @@
 #include "userprog/check_perm.h"
 
+#include "threads/mmu.h"
+#include "threads/thread.h"
 #include "threads/vaddr.h"
-
-// #ifndef VM
 
 /* Reads a byte at user virtual address UADDR.
  * UADDR must be below KERN_BASE.
@@ -54,6 +54,8 @@ bool put_user(uint8_t *udst, uint8_t byte) {
  * 또한, 검사 범위가 커널 영역(KERN_BASE)이상일 경우 즉시 false를 반환합니다.
  * get_user 및 put_user는 페이지 폴트 발생 시 -1을 반환하도록 구현되어 있습니다.
  */
+
+#ifndef VM
 bool is_user_accesable(void *start, size_t size, enum pointer_check_flags flag) {
     if (flag & IS_STR) {
         if (get_user((uint8_t *)start) == (int64_t)-1) {
@@ -89,7 +91,34 @@ bool is_user_accesable(void *start, size_t size, enum pointer_check_flags flag) 
     return true;
 }
 
-// #endif
+#else
+bool is_user_accesable(void *start, size_t size, enum pointer_check_flags flag) {
+    uintptr_t end = (uintptr_t)start + size, ptr = start;
+    size_t n = pg_diff(start, end);
+    int64_t byte;
+
+    ASSERT((uintptr_t)start <= (uintptr_t)end);
+
+    if (start == NULL || ((flag & P_USER) && !is_user_vaddr(end))) {
+        return false;
+    }
+
+    // for (int i = 0; i < n + 1; i++) {
+    //     byte = *(char *)ptr;
+    //     if (flag & P_WRITE) {
+    //         *(char *)ptr = byte;
+    //         printf("check w perm : %d\n",
+    //                is_writable(pml4e_walk(thread_current()->pml4, ptr, false)));
+    //     }
+    //     ptr += PGSIZE;
+    //     if (ptr > end) {
+    //         ptr = end;
+    //     }
+    // }
+    return true;
+}
+
+#endif
 
 bool check_user_addr_valid(uintptr_t uaddr) {
     if (uaddr < 0x1000 || is_kernel_vaddr(uaddr)) {
