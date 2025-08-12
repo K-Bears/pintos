@@ -37,6 +37,8 @@ static void seek_handler(int fd, unsigned position);
 static unsigned tell_handler(int fd);
 static void close_handler(int fd);
 static int dup2_handler(int oldfd, int newfd);
+static void *mmap_handler(void *addr, size_t length, int writable, int fd, off_t offset);
+static void munmap_handler(void *addr);
 /* feat/syscall_handler */
 
 /* System call.
@@ -114,7 +116,12 @@ void syscall_handler(struct intr_frame *f) {
         case SYS_DUP2:
             f->R.rax = dup2_handler(f->R.rdi, f->R.rsi);
             break;
-
+        case SYS_MMAP:
+            f->R.rax = mmap_handler(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+            break;
+        case SYS_MUNMAP:
+            munmap_handler(f->R.rdi);
+            break;
         default:
             printf("system call!\n");
             printf("undefined system call number: %d\n", syscall_num);
@@ -302,4 +309,31 @@ static void close_handler(int fd) {
 
 int dup2_handler(int oldfd, int newfd) {
     return dup2_fd(oldfd, newfd);
+}
+
+static void *mmap_handler(void *addr, size_t length, int writable, int fd, off_t offset) {
+    if (length == 0 || pg_ofs(addr) != 0) {
+        return NULL;
+    }
+    if (!check_user_addr_valid(addr) || !check_user_addr_valid(addr + length)) {
+        return NULL;
+    }
+    struct File *file = get_file_from_fd(fd);
+    off_t file_size;
+    if (file->type == STDIN || file->type == STDOUT || (file_size = get_file_size(file)) == 0) {
+        return NULL;
+    }
+    size_t n = pg_no(pg_round_up(file_size));
+    uintptr_t va = addr;
+    for (int i = 0; i < n; i++) {
+        if (check_page_already_mapped(va + i * PGSIZE)) {
+            return NULL;
+        }
+    }
+
+    return do_mmap(addr, length, writable, file->file_ptr, offset);
+}
+
+static void munmap_handler(void *addr) {
+    do_munmap(addr);
 }

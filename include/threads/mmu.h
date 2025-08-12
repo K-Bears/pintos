@@ -24,6 +24,7 @@ void pml4_set_accessed(uint64_t *pml4, const void *upage, bool accessed);
 #define is_writable(pte) (*(pte) & PTE_W)
 #define is_user_pte(pte) (*(pte) & PTE_U)
 #define is_kern_pte(pte) (!is_user_pte(pte))
+#define is_dirty(pte) (*(pte) & PTE_D)
 
 #define pte_get_paddr(pte) (pg_round_down(*(pte)))
 

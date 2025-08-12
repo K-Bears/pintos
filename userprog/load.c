@@ -469,6 +469,9 @@ static bool lazy_load_segment(struct page *page, void *aux) {
     if (file_read_at(fm->file, page->frame->kva, fm->read_bytes, fm->ofs) != (int)fm->read_bytes)
         goto done;
 
+    // zero bit 초기화
+    memset(page->frame->kva + fm->read_bytes, 0, fm->zero_bytes);
+
     /* 3) 페이지 테이블에 매핑 */
     if (!pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, fm->writable))
         goto done;
