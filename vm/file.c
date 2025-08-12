@@ -74,6 +74,9 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         struct file_page *data = malloc(sizeof(struct file_page));
+        if (data == NULL) {
+            PANIC("here");
+        }
         data->file = file_reopen(file);
         data->ofs = offset;
         data->page_read_bytes = page_read_bytes;
@@ -85,7 +88,7 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
             PANIC("tid : %d 에서, %p 주소 mmap 할당 오류\n", thread_current()->tid, va);
         }
 
-        read_bytes -= PGSIZE;
+        read_bytes -= read_bytes > PGSIZE ? PGSIZE : read_bytes;
         file_left_size -= page_read_bytes;
         va += PGSIZE;
         offset += page_read_bytes;
