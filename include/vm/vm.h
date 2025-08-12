@@ -33,7 +33,7 @@ struct page {
     /* Your implementation */
     bool writable;
     struct hash_elem hash_elem;
-    uint64_t *pte;
+    // uint64_t *pte;
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
     union {
@@ -50,7 +50,7 @@ struct page {
 struct frame {
     void *kva;
     struct page *page;
-    uint64_t *pte;
+    // uint64_t *pte;
     bool avoid_swap;
 };
 

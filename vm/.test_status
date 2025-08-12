@@ -1,5 +1,5 @@
 exec-bad-ptr PASS
-swap-iter FAIL
+swap-iter PASS
 sm-full PASS
 rox-simple PASS
 page-linear PASS
@@ -21,7 +21,7 @@ mmap-overlap PASS
 create-normal PASS
 priority-donate-lower PASS
 mmap-misalign PASS
-swap-anon FAIL
+swap-anon PASS
 bad-write PASS
 open-twice PASS
 page-shuffle PASS
@@ -109,7 +109,7 @@ priority-change PASS
 write-boundary PASS
 wait-killed PASS
 lg-full PASS
-swap-file FAIL
+swap-file PASS
 close-bad-fd PASS
 alarm-negative PASS
 multi-child-fd PASS

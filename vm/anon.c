@@ -69,8 +69,6 @@ static bool anon_swap_out(struct page *page) {
     anon_page->alloc_swap = true;
     anon_page->swap_slot = swap_slot;
     write_swap_page(anon_page->swap_slot, page->frame->kva, PGSIZE);
-    page->frame = NULL;
-    *(page->pte) = NULL;
     return true;
 }
 
@@ -87,7 +85,7 @@ static bool read_swap_page(size_t swap_slot, char *buffer, size_t size) {
     size_t n = (size + DISK_SECTOR_SIZE - 1) / DISK_SECTOR_SIZE;
     disk_sector_t sector = swap_slot * SECPERPAGE;
     for (int i = 0; i < n; i++) {
-        disk_read(swap_disk, sector, ((char *)(buffer) + (i * DISK_SECTOR_SIZE)));
+        disk_read(swap_disk, sector + i, ((char *)(buffer) + (i * DISK_SECTOR_SIZE)));
     }
     return true;
 }
@@ -97,7 +95,7 @@ static bool write_swap_page(size_t swap_slot, char *buffer, size_t size) {
     size_t n = (size + DISK_SECTOR_SIZE - 1) / DISK_SECTOR_SIZE;
     disk_sector_t sector = swap_slot * SECPERPAGE;
     for (int i = 0; i < n; i++) {
-        disk_write(swap_disk, sector, ((char *)(buffer) + (i * DISK_SECTOR_SIZE)));
+        disk_write(swap_disk, sector + i, ((char *)(buffer) + (i * DISK_SECTOR_SIZE)));
     }
     return true;
 }

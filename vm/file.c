@@ -48,7 +48,7 @@ static bool file_backed_swap_in(struct page *page, void *kva) {
 /* Swap out the page by writeback contents to the file. */
 static bool file_backed_swap_out(struct page *page) {
     struct file_page *file_page = &page->file;
-    if (is_dirty(page->pte) &&
+    if (pml4_is_dirty(thread_current()->pml4, page->va) &&
         file_write_at(file_page->file, page->frame->kva, file_page->page_read_bytes,
                       file_page->ofs) != (off_t)file_page->page_read_bytes) {
         return false;

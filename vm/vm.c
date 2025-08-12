@@ -49,7 +49,7 @@ enum vm_type page_get_type(struct page *page) {
 static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
-static void vm_free_frame(struct frame *frame);
+static void vm_free_frame(struct frame *frame, void *va);
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
@@ -113,6 +113,7 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED, struct page *pa
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
     struct frame *frame = page->frame;
+    void *va = page->va;
     // hash 테이블에서 제거
     struct hash_elem *e = hash_delete(&spt->table, &page->hash_elem);
 
@@ -120,27 +121,25 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
 
     // Frame 해제
     if (frame != NULL) {
-        vm_free_frame(frame);
+        vm_free_frame(frame, va);
     }
 }
 
 /* Get the struct frame, that will be evicted. */
 static struct frame *vm_get_victim(void) {
-    struct frame victim;
-    uintptr_t *pte;
+    struct frame *victim;
     for (int i = 0; i <= user_pages; i++) {
-        victim = frame_table[next++];
+        victim = &(frame_table[next++]);
         if (next >= user_pages) {
             next = 0;
         }
 
-        pte = (victim.page->pte);
-        if (*pte & PTE_A) {
-            *pte &= ~(uintptr_t)PTE_A;
+        if (pml4_is_accessed(thread_current()->pml4, victim->page->va)) {
+            pml4_set_accessed(thread_current()->pml4, victim->page->va, false);
             continue;
         }
 
-        return &victim;
+        return victim;
     }
     return NULL;
 }
@@ -148,15 +147,16 @@ static struct frame *vm_get_victim(void) {
 /* Evict one page and return the corresponding frame.
  * Return NULL on error.*/
 static struct frame *vm_evict_frame(void) {
-    struct frame *victim UNUSED = vm_get_victim();
+    struct frame *victim = vm_get_victim();
     /* TODO: swap out the victim and return the evicted frame. */
     if (!swap_out(victim->page)) {
         // PANIC
         NOT_REACHED();
     }
-    victim->page->pte = NULL;
+    pml4_clear_page(thread_current()->pml4, victim->page->va);
+    uintptr_t *pte = pml4e_walk(thread_current()->pml4, victim->page->va, false);
+    victim->page->frame = NULL;
     victim->page = NULL;
-
     return victim;
 }
 
@@ -178,10 +178,9 @@ static struct frame *vm_get_frame(void) {
     return frame;
 }
 
-static void vm_free_frame(struct frame *frame) {
+static void vm_free_frame(struct frame *frame, void *va) {
     palloc_free_page(frame->kva);
-    *(frame->pte) = NULL;
-    frame->pte = NULL;
+    pml4_clear_page(thread_current()->pml4, va);
     frame->page = NULL;
 }
 
@@ -263,8 +262,6 @@ static bool vm_do_claim_page(struct page *page) {
     if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable)) {
         return false;
     }
-    page->pte = pml4e_walk(thread_current()->pml4, page->va, false);
-    frame->pte = page->pte;
     return swap_in(page, frame->kva);
 }
 
