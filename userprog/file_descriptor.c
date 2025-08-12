@@ -142,6 +142,9 @@ int init_fd(struct thread *t) {
 }
 
 struct File *get_file_from_fd(int fd) {
+    if (fd < 0) {
+        return NULL;
+    }
 #ifndef VM
     if (get_user((thread_current()->fdt + fd)) == (int64_t)-1) {
         return NULL;

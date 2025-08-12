@@ -39,7 +39,9 @@ struct init_data {
 /* General process initializer for initd and other process. */
 static void process_init(void) {
     struct thread *current = thread_current();
+#ifdef VM
     supplemental_page_table_init(&current->spt);
+#endif
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.

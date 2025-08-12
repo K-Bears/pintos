@@ -116,12 +116,14 @@ void syscall_handler(struct intr_frame *f) {
         case SYS_DUP2:
             f->R.rax = dup2_handler(f->R.rdi, f->R.rsi);
             break;
+#ifdef VM
         case SYS_MMAP:
             f->R.rax = mmap_handler(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
             break;
         case SYS_MUNMAP:
             munmap_handler(f->R.rdi);
             break;
+#endif
         default:
             printf("system call!\n");
             printf("undefined system call number: %d\n", syscall_num);
@@ -311,6 +313,7 @@ int dup2_handler(int oldfd, int newfd) {
     return dup2_fd(oldfd, newfd);
 }
 
+#ifdef VM
 static void *mmap_handler(void *addr, size_t length, int writable, int fd, off_t offset) {
     if (length == 0 || pg_ofs(addr) != 0 || pg_ofs(offset) != 0) {
         return NULL;
@@ -337,3 +340,4 @@ static void *mmap_handler(void *addr, size_t length, int writable, int fd, off_t
 static void munmap_handler(void *addr) {
     do_munmap(addr);
 }
+#endif

@@ -17,6 +17,8 @@ bool put_user(uint8_t *udst, uint8_t byte);
 bool is_user_accesable(void *start, size_t size, enum pointer_check_flags flag);
 
 bool check_user_addr_valid(uintptr_t uaddr);
+#ifdef VM
 bool check_page_already_mapped(uintptr_t uaddr);
+#endif
 
 #endif /* USERPROG_CHECK_PERM_H */

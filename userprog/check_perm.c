@@ -127,7 +127,9 @@ bool check_user_addr_valid(uintptr_t uaddr) {
     return true;
 }
 
+#ifdef VM
 bool check_page_already_mapped(uintptr_t uaddr) {
     uaddr = pg_round_down(uaddr);
     return spt_find_page(&thread_current()->spt, uaddr) != NULL;
 }
+#endif
