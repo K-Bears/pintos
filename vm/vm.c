@@ -157,7 +157,7 @@ static struct frame *vm_get_frame(void) {
 static void vm_stack_growth(void *addr UNUSED) {
     // addr이 더 이상 페이지 폴트를 일으키지 않도록 하나 이상의 익명 페이지를 할당해야 함.
     // 이 때 addr을 페이지 크기(PGSIZE) 단위로 내림 처리해야 함.
-    vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
+    vm_alloc_page(VM_ANON, pg_round_down(addr), 1);
 }
 
 /* Handle the fault on write_protected page */
@@ -188,14 +188,18 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool us
         if (!user)           // kernel access인 경우 thread에서 rsp를 가져와야 한다.
             rsp = thread_current()->rsp;
 
-        // 스택 확장으로 처리할 수 있는 폴트인 경우, vm_stack_growth를 호출한다.
-        // push가 되는 경우, 레지터스의 최대 크기 만큼 rps에 push된다.
-        if (USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK)
-            vm_stack_growth(addr);
-        else if (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK)
-            vm_stack_growth(addr);
+        /* 1. addr이 NULL이 아닌 경우
+        2. addr이 1MB 보다 작아야 함
+        3. 인터럽트 프레임에 저장되는 f->rsp는 폴트 직전의 RSP로 보는 게 관례라서, 유요한 스택
+        접근인지 보기위해서는 rsp - 8 <= addr인지 확인
+        4. USER_STACK보다 아래 주소에 존재해야 함 */
 
+        if (addr != NULL && USER_STACK - (1 << 20) <= addr && rsp - 8 <= addr &&
+            addr < USER_STACK) {
+            vm_stack_growth(addr);
+        }
         page = spt_find_page(spt, addr);
+
         if (page == NULL)
             return false;
         if (write == 1 && page->writable == 0)  // write 불가능한 페이지에 write 요청한 경우
@@ -255,7 +259,80 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
 
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-                                  struct supplemental_page_table *src UNUSED) {}
+                                  struct supplemental_page_table *src UNUSED) {
+    /*
+    src SPT를 순회하면서, 각 SPT 엔트리를 dst SPT에 복사한다.
+    이때 각 엔트리(페이지)의 타입에 따라 복사하는 방법을 다르게 적용한다.
+    VM_UNINIT의 경우,
+    VM_FILE의 경우,
+    VM_ANON의 경우,
+    */
+    // TODO: 보조 페이지 테이블을 src에서 dst로 복사합니다.
+    // TODO: src의 각 페이지를 순회하고 dst에 해당 entry의 사본을 만듭니다.
+    // TODO: uninit page를 할당하고 그것을 즉시 claim해야 합니다.
+    struct hash_iterator i;
+    hash_first(&i, &src->table);
+    while (hash_next(&i)) {
+        // src_page 정보
+        struct page *src_page = hash_entry(hash_cur(&i), struct page, hash_elem);
+        enum vm_type type = src_page->operations->type;
+        void *upage = src_page->va;
+        bool writable = src_page->writable;
+
+        /* 1) type이 uninit이면 */
+        if (type == VM_UNINIT) {  // uninit page 생성 & 초기화
+            vm_initializer *init = src_page->uninit.init;
+            void *aux = src_page->uninit.aux;
+            vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, aux);
+            continue;
+        }
+
+        /* 2) type이 file이면 */
+        if (type == VM_FILE) {
+            // struct lazy_load_arg *file_aux = malloc(sizeof(struct lazy_load_arg));
+            // file_aux->file = src_page->file.file;
+            // file_aux->ofs = src_page->file.offset;
+            // file_aux->read_bytes = src_page->file.read_bytes;
+            // file_aux->zero_bytes = src_page->file.zero_bytes;
+            // if (!vm_alloc_page_with_initializer(type, upage, writable, NULL, file_aux))
+            //     return false;
+            // struct page *file_page = spt_find_page(dst, upage);
+            // file_backed_initializer(file_page, type, NULL);
+            // file_page->frame = src_page->frame;
+            // pml4_set_page(thread_current()->pml4, file_page->va, src_page->frame->kva,
+            //               src_page->writable);
+            if (!vm_alloc_page(type, upage, writable)) {
+                return false;
+            }
+
+            if (!vm_claim_page(upage)) {
+                return false;
+            }
+
+            struct page *dst_page = spt_find_page(dst, upage);
+            if (dst_page == NULL || src_page->frame == NULL) {
+                return false;
+            }
+
+            memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+            continue;
+        }
+
+        /* 3) type이 anon이면 */
+        if (!vm_alloc_page(type, upage, writable))  // uninit page 생성 & 초기화
+            return false;  // init이랑 aux는 Lazy Loading에 필요. 지금 만드는 페이지는 기다리지 않고
+                           // 바로 내용을 넣어줄 것이므로 필요 없음
+
+        // vm_claim_page으로 요청해서 매핑 & 페이지 타입에 맞게 초기화
+        if (!vm_claim_page(upage))
+            return false;
+
+        // 매핑된 프레임에 내용 로딩
+        struct page *dst_page = spt_find_page(dst, upage);
+        memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+    }
+    return true;
+}
 
 /* Free the resource hold by the supplemental page table */
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {

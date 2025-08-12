@@ -35,7 +35,7 @@ mmap-remove FAIL
 priority-preempt PASS
 fork-close FAIL
 alarm-simultaneous PASS
-fork-boundary FAIL
+fork-boundary PASS
 priority-donate-chain PASS
 create-bound PASS
 rox-multichild FAIL
@@ -75,7 +75,7 @@ read-stdout PASS
 priority-fifo PASS
 wait-bad-pid PASS
 lg-create PASS
-pt-grow-bad FAIL
+pt-grow-bad PASS
 pt-grow-stk-sc FAIL
 mmap-twice FAIL
 exec-read FAIL
@@ -92,7 +92,7 @@ sm-random PASS
 alarm-zero PASS
 open-boundary PASS
 create-null FAIL
-pt-grow-stack FAIL
+pt-grow-stack PASS
 fork-recursive FAIL
 open-bad-ptr FAIL
 mmap-inherit FAIL
@@ -102,7 +102,7 @@ mmap-off FAIL
 mmap-over-code FAIL
 bad-read FAIL
 mmap-close FAIL
-fork-once FAIL
+fork-once PASS
 mmap-bad-fd3 FAIL
 mmap-bad-fd2 FAIL
 priority-change PASS
@@ -129,7 +129,7 @@ create-exists PASS
 mmap-bad-off FAIL
 open-normal PASS
 bad-jump FAIL
-pt-big-stk-obj FAIL
+pt-big-stk-obj PASS
 bad-jump2 FAIL
 open-missing PASS
 create-empty PASS
