@@ -112,14 +112,16 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED, struct page *pa
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
-    // Frame 해제
-    if (page->frame != NULL) {
-        vm_free_frame(page->frame);
-    }
+    struct frame *frame = page->frame;
     // hash 테이블에서 제거
     struct hash_elem *e = hash_delete(&spt->table, &page->hash_elem);
 
     vm_dealloc_page(page);
+
+    // Frame 해제
+    if (frame != NULL) {
+        vm_free_frame(frame);
+    }
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -178,7 +180,8 @@ static struct frame *vm_get_frame(void) {
 
 static void vm_free_frame(struct frame *frame) {
     palloc_free_page(frame->kva);
-    *(frame->page->pte) = NULL;
+    *(frame->pte) = NULL;
+    frame->pte = NULL;
     frame->page = NULL;
 }
 
@@ -261,6 +264,7 @@ static bool vm_do_claim_page(struct page *page) {
         return false;
     }
     page->pte = pml4e_walk(thread_current()->pml4, page->va, false);
+    frame->pte = page->pte;
     return swap_in(page, frame->kva);
 }
 

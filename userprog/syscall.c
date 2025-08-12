@@ -312,7 +312,7 @@ int dup2_handler(int oldfd, int newfd) {
 }
 
 static void *mmap_handler(void *addr, size_t length, int writable, int fd, off_t offset) {
-    if (length == 0 || pg_ofs(addr) != 0) {
+    if (length == 0 || pg_ofs(addr) != 0 || pg_ofs(offset) != 0) {
         return NULL;
     }
     if (!check_user_addr_valid(addr) || !check_user_addr_valid(addr + length)) {

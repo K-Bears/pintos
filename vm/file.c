@@ -88,7 +88,6 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
         read_bytes -= PGSIZE;
         file_left_size -= page_read_bytes;
         va += PGSIZE;
-        // FIXME : 여기 문제임!!
         offset += page_read_bytes;
     }
     return addr;

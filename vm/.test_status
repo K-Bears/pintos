@@ -46,7 +46,7 @@ priority-condvar PASS
 priority-donate-nest PASS
 page-merge-par PASS
 rox-child PASS
-mmap-write FAIL
+mmap-write PASS
 alarm-single PASS
 lazy-file PASS
 pt-bad-addr PASS
@@ -98,7 +98,7 @@ open-bad-ptr PASS
 mmap-inherit PASS
 mmap-unmap PASS
 write-normal PASS
-mmap-off FAIL
+mmap-off PASS
 mmap-over-code PASS
 mmap-close PASS
 bad-read PASS
@@ -126,7 +126,7 @@ fork-read PASS
 write-zero PASS
 alarm-multiple PASS
 create-exists PASS
-mmap-bad-off FAIL
+mmap-bad-off PASS
 open-normal PASS
 bad-jump PASS
 pt-big-stk-obj PASS

@@ -50,6 +50,7 @@ struct page {
 struct frame {
     void *kva;
     struct page *page;
+    uint64_t *pte;
     bool avoid_swap;
 };
 
