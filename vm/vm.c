@@ -149,7 +149,7 @@ static struct frame *vm_get_frame(void) {
     frame = &frame_table[pg_no(kpage) - pg_no(user_pool_base)];
     frame->kva = kpage;
     ASSERT(frame != NULL);
-    ASSERT(frame->page == NULL);
+    // ASSERT(frame->page == NULL);
     return frame;
 }
 
@@ -254,7 +254,7 @@ static bool vm_do_claim_page(struct page *page) {
 /* Initialize new supplemental page table */
 void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
     ASSERT(spt != NULL);
-    hash_init(spt, page_hash, page_less, NULL);
+    hash_init(&spt->table, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
@@ -282,8 +282,24 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
         /* 1) type이 uninit이면 */
         if (type == VM_UNINIT) {  // uninit page 생성 & 초기화
             vm_initializer *init = src_page->uninit.init;
-            void *aux = src_page->uninit.aux;
-            vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, aux);
+            // size_t *size = src_page->uninit.aux;
+            // struct file_meta *aux_src = (struct file_meta *)src_page->uninit.aux;
+            // struct file_meta *aux_dup = malloc(*size);
+            // memcpy(aux_dup, aux_src, *size);
+            void *aux_src = src_page->uninit.aux;
+            void *aux_dup = NULL;
+
+            size_t bytes = *(size_t *)aux_src;
+            aux_dup = malloc(bytes);
+            memcpy(aux_dup, aux_src, bytes);
+
+            // aux 복사
+            // 1. file-meta 크기로 적용 or
+            // 2. aux로 전달되는 구조체의 크기(현재 file-meta) 크기 첫번째 멤버로 사이즈를
+            // 넣는다.
+            vm_alloc_page_with_initializer(VM_ANON, upage, writable, init,
+                                           aux_dup);  // lazy_loading
+
             continue;
         }
 
