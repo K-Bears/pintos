@@ -1,6 +1,7 @@
 /* anon.c: Implementation of page for non-disk image (a.k.a. anonymous page). */
 
 #include "devices/disk.h"
+#include "threads/mmu.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "vm/vm.h"
@@ -50,25 +51,31 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva) {
 
 /* Swap in the page by read contents from the swap disk. */
 static bool anon_swap_in(struct page *page, void *kva) {
-    struct anon_page *anon_page = &page->anon;
+    lock_acquire(&page->page_group->lock);
+    struct anon_page *anon_page =
+        &list_entry(list_front(&page->page_group->page_list), struct page, list_elem)->anon;
     if (!anon_page->alloc_swap) {
         return false;
     }
     anon_page->alloc_swap = false;
-    read_swap_page(anon_page->swap_slot, page->frame->kva, PGSIZE);
+    read_swap_page(anon_page->swap_slot, page->page_group->frame->kva, PGSIZE);
+    lock_release(&page->page_group->lock);
     free_swap(anon_page->swap_slot);
 }
 
 /* Swap out the page by writing contents to the swap disk. */
 static bool anon_swap_out(struct page *page) {
     size_t swap_slot = alloc_swap_slot();
+    lock_acquire(&page->page_group->lock);
     if (swap_slot == BITMAP_ERROR) {
         return false;
     }
-    struct anon_page *anon_page = &page->anon;
+    struct anon_page *anon_page =
+        &list_entry(list_front(&page->page_group->page_list), struct page, list_elem)->anon;
     anon_page->alloc_swap = true;
     anon_page->swap_slot = swap_slot;
-    write_swap_page(anon_page->swap_slot, page->frame->kva, PGSIZE);
+    write_swap_page(anon_page->swap_slot, page->page_group->frame->kva, PGSIZE);
+    lock_release(&page->page_group->lock);
     return true;
 }
 
@@ -78,6 +85,7 @@ static void anon_destroy(struct page *page) {
     if (anon_page->alloc_swap) {
         free_swap(anon_page->swap_slot);
     }
+    remove_page_group(page->page_group, page);
 }
 
 static bool read_swap_page(size_t swap_slot, char *buffer, size_t size) {
@@ -109,16 +117,9 @@ static size_t alloc_swap_slot(void) {
 
 bool copy_anon_page(struct hash *hash, struct page *dst_page, struct page *src_page) {
     uninit_new(dst_page, src_page->va, NULL, VM_ANON, NULL, anon_initializer);
-    dst_page->writable = src_page->writable;
-    hash_insert(hash, &dst_page->hash_elem);
-    if (!vm_claim_page(dst_page->va)) {
-        return false;
-    }
-    if (src_page->anon.alloc_swap) {
-        read_swap_page(src_page->anon.swap_slot, dst_page->frame->kva, PGSIZE);
-    } else {
-        memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
-    }
+    copy_base_init(hash, dst_page, src_page);
+    swap_in(dst_page, src_page->page_group->frame->kva);
+    pml4_set_perm(src_page->pml4, src_page->va, false, PTE_W);
     return true;
 }
 

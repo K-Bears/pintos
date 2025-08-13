@@ -4,6 +4,7 @@
 
 #include "kernel/hash.h"
 #include "threads/palloc.h"
+#include "threads/synch.h"
 #include "vm/anon.h"
 #include "vm/file.h"
 #include "vm/uninit.h"
@@ -21,18 +22,27 @@ void page_delete(struct hash_elem *e, void *aux);
 unsigned page_hash(const struct hash_elem *p_, void *aux);
 bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux);
 
+struct page_group {
+    struct frame *frame;
+    struct list page_list;
+    struct lock lock;
+};
+
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
  * uninit_page, file_page, anon_page, and page cache (project4).
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
 struct page {
     const struct page_operations *operations;
-    void *va;            /* Address in terms of user space */
-    struct frame *frame; /* Back reference for frame */
+    void *va; /* Address in terms of user space */
+    struct page_group *page_group;
 
     /* Your implementation */
     bool writable;
     struct hash_elem hash_elem;
+    struct list_elem list_elem;
+    uint64_t *pml4; /* Page map level 4 */
+
     // uint64_t *pte;
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
@@ -49,9 +59,8 @@ struct page {
 /* The representation of "frame" */
 struct frame {
     void *kva;
-    struct page *page;
-    // uint64_t *pte;
     bool avoid_swap;
+    struct page_group *page_group;
 };
 
 /* The function table for page operations.
@@ -97,5 +106,8 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
+bool copy_base_init(struct hash *hash, struct page *dst_page, struct page *src_page);
+void vm_free_frame(struct frame *frame);
+void remove_page_group(struct page_group *page_group, struct page *page);
 
 #endif /* VM_VM_H */

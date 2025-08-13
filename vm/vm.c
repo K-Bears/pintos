@@ -49,7 +49,8 @@ enum vm_type page_get_type(struct page *page) {
 static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
-static void vm_free_frame(struct frame *frame, void *va);
+static struct page_group *init_page_group();
+static void page_init(struct page *page, bool writable, struct hash *hash);
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
@@ -81,7 +82,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
             }
 
             uninit_new(Page, upage, init, type, aux, initializer);
-            Page->writable = writable;
+            page_init(Page, writable, spt);
         }
         /* Insert the page into the spt. */
         spt_insert_page(spt, Page);
@@ -111,18 +112,38 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED, struct page *pa
     return hash_insert(&spt->table, &page->hash_elem);
 }
 
+void remove_page_group(struct page_group *page_group, struct page *page) {
+    lock_acquire(&page_group->lock);
+    pml4_clear_page(page->pml4, page->va);
+
+    if (list_size(&page_group->page_list) == 1) {
+        lock_release(&page_group->lock);
+        if (page_group->frame != NULL) {
+            vm_free_frame(page_group->frame);
+        }
+        free(page_group);
+        return;
+    } else {
+        if (page_group->frame == NULL) {
+            if (list_front(&page_group->page_list) == &page->list_elem &&
+                page->operations->type == VM_ANON) {
+                struct page *p = list_entry(list_next(&page->list_elem), struct page, list_elem);
+                p->anon = page->anon;
+            }
+        }
+        list_remove(&page->list_elem);
+        lock_release(&page_group->lock);
+    }
+}
+
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page) {
-    struct frame *frame = page->frame;
+    struct page_group *page_group = page->page_group;
     void *va = page->va;
+
     // hash 테이블에서 제거
     struct hash_elem *e = hash_delete(&spt->table, &page->hash_elem);
 
     vm_dealloc_page(page);
-
-    // Frame 해제
-    if (frame != NULL) {
-        vm_free_frame(frame, va);
-    }
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -133,11 +154,18 @@ static struct frame *vm_get_victim(void) {
         if (next >= user_pages) {
             next = 0;
         }
-
-        if (pml4_is_accessed(thread_current()->pml4, victim->page->va)) {
-            pml4_set_accessed(thread_current()->pml4, victim->page->va, false);
+        if (victim->avoid_swap == true) {
             continue;
         }
+        lock_acquire(&victim->page_group->lock);
+        struct page *p =
+            list_entry(list_back(&victim->page_group->page_list), struct page, list_elem);
+        if (pml4_is_accessed(p->pml4, p->va)) {
+            pml4_set_accessed(p->pml4, p->va, false);
+            lock_release(&victim->page_group->lock);
+            continue;
+        }
+        lock_release(&victim->page_group->lock);
 
         return victim;
     }
@@ -148,15 +176,20 @@ static struct frame *vm_get_victim(void) {
  * Return NULL on error.*/
 static struct frame *vm_evict_frame(void) {
     struct frame *victim = vm_get_victim();
-    /* TODO: swap out the victim and return the evicted frame. */
-    if (!swap_out(victim->page)) {
-        // PANIC
+    /*  swap out the victim and return the evicted frame. */
+    lock_acquire(&victim->page_group->lock);
+    struct list_elem *e = list_begin(list_back(&victim->page_group->page_list));
+    if (!swap_out(list_entry(e, struct page, list_elem))) {
         NOT_REACHED();
     }
-    pml4_clear_page(thread_current()->pml4, victim->page->va);
-    uintptr_t *pte = pml4e_walk(thread_current()->pml4, victim->page->va, false);
-    victim->page->frame = NULL;
-    victim->page = NULL;
+    for (e; e != list_end(&victim->page_group->page_list);
+         list_next(&victim->page_group->page_list)) {
+        struct page *p = list_entry(e, struct page, list_elem);
+        pml4_clear_page(p->pml4, p->va);
+    }
+    lock_release(&victim->page_group->lock);
+    victim->page_group->frame = NULL;
+    victim->page_group = NULL;
     return victim;
 }
 
@@ -172,16 +205,23 @@ static struct frame *vm_get_frame(void) {
         return vm_evict_frame();
     }
     frame = &frame_table[pg_no(kpage) - pg_no(user_pool_base)];
-    frame->kva = kpage;
     ASSERT(frame != NULL);
-    // ASSERT(frame->page == NULL);
+    frame->kva = kpage;
     return frame;
 }
 
-static void vm_free_frame(struct frame *frame, void *va) {
+void vm_free_frame(struct frame *frame) {
+    lock_acquire(&frame->page_group->lock);
+    for (struct list_elem *e = list_begin(list_back(&frame->page_group->page_list));
+         e != list_end(&frame->page_group->page_list); list_next(&frame->page_group->page_list)) {
+        struct page *p = list_entry(e, struct page, list_elem);
+        pml4_clear_page(p->pml4, p->va);
+    }
+    frame->page_group->frame = NULL;
+    lock_release(&frame->page_group->lock);
+    frame->page_group = NULL;
+    frame->avoid_swap = false;
     palloc_free_page(frame->kva);
-    pml4_clear_page(thread_current()->pml4, va);
-    frame->page = NULL;
 }
 
 /* Growing the stack. */
@@ -190,7 +230,30 @@ static void vm_stack_growth(void *addr UNUSED) {
 }
 
 /* Handle the fault on write_protected page */
-static bool vm_handle_wp(struct page *page UNUSED) {}
+static bool vm_handle_wp(struct page *page UNUSED) {
+    struct page_group *old_page_group = page->page_group;
+    lock_acquire(&old_page_group->lock);
+    if (list_size(&page->page_group->page_list) > 1) {
+        struct page_group *new_page_group;
+        if ((new_page_group = init_page_group()) == NULL) {
+            return false;
+        }
+
+        old_page_group->frame->avoid_swap = true;
+        struct frame *new_frame = vm_get_frame();
+        old_page_group->frame->avoid_swap = false;
+        new_page_group->frame = new_frame;
+        new_frame->page_group = new_page_group;
+        memcpy(new_frame->kva, old_page_group->frame->kva, PGSIZE);
+
+        list_remove(&page->list_elem);
+        list_push_back(&new_page_group->page_list, &page->list_elem);
+        page->page_group = new_page_group;
+    }
+    lock_release(&old_page_group->lock);
+    pml4_set_perm(page->pml4, page->va, true, PTE_W);
+    return true;
+}
 
 static bool vm_check_stack_growth(void *addr) {
     // pushq 명령어의 경우 최대 8 까지만 내려감(레지스터 크기가 8)
@@ -208,22 +271,27 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool us
         return false;
     }
 
-    // FIXME : COW 때 고쳐야 함
-    if (!not_present) {
-        return false;
-    }
-
     // spt 보고 stack groth 판단
     struct page *page = NULL;
     page = spt_find_page(&thread_current()->spt, pg_round_down(addr));
-    if (page == NULL && vm_check_stack_growth(addr)) {
-        vm_stack_growth(pg_round_down(addr));
-        page = spt_find_page(&thread_current()->spt, pg_round_down(addr));
-    }
     if (page == NULL) {
-        return false;
+        if (vm_check_stack_growth(addr)) {
+            vm_stack_growth(pg_round_down(addr));
+            page = spt_find_page(&thread_current()->spt, pg_round_down(addr));
+        }
+        if (page == NULL) {
+            return false;
+        }
     }
-
+    // COW 때 고쳐야 함
+    if (!not_present) {
+        if (!(write && page->writable)) {
+            return false;
+        }
+        if (!vm_handle_wp(page)) {
+            return false;
+        }
+    }
     return vm_do_claim_page(page);
 }
 
@@ -248,21 +316,34 @@ bool vm_claim_page(void *va UNUSED) {
 
 /* Claim the PAGE and set up the mmu. */
 static bool vm_do_claim_page(struct page *page) {
+    bool already_exist = true;
     if (page == NULL) {
         return false;
     }
 
-    struct frame *frame = vm_get_frame();
+    if (page->page_group == NULL) {
+        if ((page->page_group = init_page_group()) == NULL) {
+            return false;
+        }
+        list_push_back(&page->page_group->page_list, &page->list_elem);
+    }
 
-    /* Set links */
-    frame->page = page;
-    page->frame = frame;
+    if (page->page_group->frame == NULL) {
+        page->page_group->frame = vm_get_frame();
+        /* Set links */
+        page->page_group->frame->page_group = page->page_group;
+        already_exist = false;
+    }
 
     /* Insert page table entry to map page's VA to frame's PA. */
-    if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable)) {
+    if (!pml4_set_page(page->pml4, page->va, page->page_group->frame->kva,
+                       page->writable && list_size(&page->page_group->page_list) == 1)) {
         return false;
     }
-    return swap_in(page, frame->kva);
+    if (!already_exist) {
+        return swap_in(page, page->page_group->frame->kva);
+    }
+    return true;
 }
 
 /* Initialize new supplemental page table */
@@ -270,6 +351,15 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED) {
     if (!hash_init(&spt->table, page_hash, page_less, spt)) {
         PANIC("!!왜 말록함? 진짜 킹받네!!\n");
     }
+}
+
+static bool anon_init_for_cp(struct page *page, void *aux) {
+    if (page->page_group->frame == NULL) {
+        struct page *front =
+            list_entry(list_front(&page->page_group->page_list), struct page, list_elem);
+        return swap_in(front, front->va);
+    }
+    return true;
 }
 
 /* Copy supplemental page table from src to dst */
@@ -287,26 +377,31 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 
         switch (src_page->operations->type) {
             case VM_UNINIT:
-                void *aux = NULL;
-                if (src_page->uninit.aux) {
-                    size_t *size = src_page->uninit.aux;
-                    if ((aux = malloc(*size)) == NULL) {
-                        goto copy_err;
-                    }
-                    memcpy(aux, src_page->uninit.aux, *size);
-                }
-                uninit_new(dst_page, src_page->va, src_page->uninit.init, src_page->uninit.type,
-                           aux, src_page->uninit.page_initializer);
-                dst_page->writable = src_page->writable;
-                hash_insert(&dst->table, &dst_page->hash_elem);
+                // void *aux = NULL;
+                // if (src_page->uninit.aux) {
+                //     size_t *size = src_page->uninit.aux;
+                //     // TODO : 자식은 어디서 free하지?
+                //     if ((aux = malloc(*size)) == NULL) {
+                //         goto copy_err;
+                //     }
+                //     memcpy(aux, src_page->uninit.aux, *size);
+                // }
+                uninit_new(dst_page, src_page->va, anon_init_for_cp, src_page->uninit.type, NULL,
+                           src_page->uninit.page_initializer);
+                copy_base_init(&dst->table, dst_page, src_page);
                 break;
             case VM_ANON:
                 if (!copy_anon_page(&dst->table, dst_page, src_page)) {
                     goto copy_err;
                 }
                 break;
-            default:
+            case FILE:
+                if (!copy_file_page(&dst->table, dst_page, src_page)) {
+                    goto copy_err;
+                }
                 break;
+            default:
+                goto copy_err;
         }
     }
     return true;
@@ -335,4 +430,36 @@ bool page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux
     const struct page *a = hash_entry(a_, struct page, hash_elem);
     const struct page *b = hash_entry(b_, struct page, hash_elem);
     return a->va < b->va;
+}
+
+static void page_init(struct page *page, bool writable, struct hash *hash) {
+    page->writable = writable;
+    page->pml4 = thread_current()->pml4;
+    hash_insert(hash, &page->hash_elem);
+}
+
+// dst는 무조건 current의 page여야 함
+bool copy_base_init(struct hash *hash, struct page *dst_page, struct page *src_page) {
+    page_init(dst_page, src_page->writable, hash);
+    if (src_page->page_group == NULL) {
+        if ((src_page->page_group = init_page_group()) == NULL) {
+            return false;
+        }
+        list_push_back(&src_page->page_group->page_list, &src_page->list_elem);
+    }
+    lock_acquire(&src_page->page_group->lock);
+    list_push_back(&src_page->page_group->page_list, &dst_page->list_elem);
+    lock_release(&src_page->page_group->lock);
+    dst_page->page_group = src_page->page_group;
+}
+
+static struct page_group *init_page_group() {
+    struct page_group *page_group = NULL;
+    if ((page_group = malloc(sizeof(struct page_group))) == NULL) {
+        return NULL;
+    }
+    list_init(&page_group->page_list);
+    page_group->frame = NULL;
+    lock_init(&page_group->lock);
+    return page_group;
 }

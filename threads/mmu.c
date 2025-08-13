@@ -299,3 +299,21 @@ void pml4_set_accessed(uint64_t *pml4, const void *vpage, bool accessed) {
             invlpg((uint64_t)vpage);
     }
 }
+
+bool pml4_check_perm(uint64_t *pml4, const void *vpage, uint64_t perm) {
+    uint64_t *pte = pml4e_walk(pml4, (uint64_t)vpage, false);
+    return pte != NULL && (*pte & perm) != 0;
+}
+
+void pml4_set_perm(uint64_t *pml4, const void *vpage, bool bit, uint64_t perm) {
+    uint64_t *pte = pml4e_walk(pml4, (uint64_t)vpage, false);
+    if (pte) {
+        if (bit)
+            *pte |= perm;
+        else
+            *pte &= ~(uint32_t)perm;
+
+        if (rcr3() == vtop(pml4))
+            invlpg((uint64_t)vpage);
+    }
+}

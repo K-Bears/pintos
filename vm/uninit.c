@@ -30,7 +30,7 @@ void uninit_new(struct page *page, void *va, vm_initializer *init, enum vm_type 
 
     *page = (struct page){.operations = &uninit_ops,
                           .va = va,
-                          .frame = NULL, /* no frame for now */
+                          .page_group = NULL, /* no frame for now */
                           .uninit = (struct uninit_page){
                               .init = init,
                               .type = type,
@@ -57,6 +57,9 @@ static bool uninit_initialize(struct page *page, void *kva) {
  * PAGE will be freed by the caller. */
 static void uninit_destroy(struct page *page) {
     struct uninit_page *uninit UNUSED = &page->uninit;
-    /* TODO: Fill this function.
+    /* TODO: page_group 할당 해제 구현
      * TODO: If you don't have anything to do, just return. */
+    if (page->page_group != NULL) {
+        remove_page_group(page->page_group, page);
+    }
 }

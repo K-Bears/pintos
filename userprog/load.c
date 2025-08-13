@@ -466,23 +466,24 @@ static bool lazy_load_segment(struct page *page, void *aux) {
     bool success = false;
 
     /* 2) 디스크에서 읽기 (fm->ofs 위치에서만) */
-    if (file_read_at(fm->file, page->frame->kva, fm->read_bytes, fm->ofs) != (int)fm->read_bytes)
+    if (file_read_at(fm->file, page->page_group->frame->kva, fm->read_bytes, fm->ofs) !=
+        (int)fm->read_bytes)
         goto done;
 
     // zero bit 초기화
-    memset(page->frame->kva + fm->read_bytes, 0, fm->zero_bytes);
+    memset(page->page_group->frame->kva + fm->read_bytes, 0, fm->zero_bytes);
 
     /* 3) 페이지 테이블에 매핑 */
-    if (!pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, fm->writable))
+    if (!pml4_set_page(thread_current()->pml4, page->va, page->page_group->frame->kva,
+                       fm->writable && list_size(&page->page_group->page_list) == 1))
         goto done;
 
     success = true;
 
 done:
     /* 4) 실패 시 할당 해제 */
-    if (!success && page->frame->kva) {
-        palloc_free_page(page->frame->kva);
-        page->frame = NULL;
+    if (!success && page->page_group->frame) {
+        vm_free_frame(page->page_group->frame);
     }
     /* 5) 메타데이터 해제 */
     free(fm);

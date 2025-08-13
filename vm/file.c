@@ -30,28 +30,34 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva) {
     struct file_page *file_page = &page->file;
     memcpy(file_page, data, sizeof(struct file_page));
     free(data);
-    file_backed_swap_in(page, kva);
+    if (page->page_group->frame != NULL) {
+        file_backed_swap_in(page, kva);
+    }
     return true;
 }
 
 /* Swap in the page by read contents from the file. */
 static bool file_backed_swap_in(struct page *page, void *kva) {
     struct file_page *file_page = &page->file;
-    if (file_read_at(file_page->file, page->frame->kva, file_page->page_read_bytes,
+    if (file_read_at(file_page->file, page->page_group->frame->kva, file_page->page_read_bytes,
                      file_page->ofs) != (off_t)file_page->page_read_bytes) {
         return false;
     }
-    memset(page->frame->kva + file_page->page_read_bytes, 0, file_page->page_zero_bytes);
+    memset(page->page_group->frame->kva + file_page->page_read_bytes, 0,
+           file_page->page_zero_bytes);
+    pml4_set_dirty(page->pml4, page->va, false);
     return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool file_backed_swap_out(struct page *page) {
     struct file_page *file_page = &page->file;
-    if (pml4_is_dirty(thread_current()->pml4, page->va) &&
-        file_write_at(file_page->file, page->frame->kva, file_page->page_read_bytes,
-                      file_page->ofs) != (off_t)file_page->page_read_bytes) {
-        return false;
+    if (pml4_is_dirty(page->pml4, page->va)) {
+        if (file_write_at(file_page->file, page->page_group->frame->kva, file_page->page_read_bytes,
+                          file_page->ofs) != (off_t)file_page->page_read_bytes) {
+            return false;
+        }
+        pml4_set_dirty(page->pml4, page->va, false);
     }
     return true;
 }
@@ -61,6 +67,7 @@ static void file_backed_destroy(struct page *page) {
     struct file_page *file_page = &page->file;
     file_backed_swap_out(page);
     file_close(file_page->file);
+    remove_page_group(page->page_group, page);
 }
 
 /* Do the mmap */
@@ -111,4 +118,15 @@ void do_munmap(void *addr) {
         page = spt_find_page(spt, va + i * PGSIZE);
         spt_remove_page(spt, page);
     }
+}
+
+bool copy_file_page(struct hash *hash, struct page *dst_page, struct page *src_page) {
+    if (src_page->page_group->frame != NULL) {
+        swap_out(src_page);
+    }
+    uninit_new(dst_page, src_page->va, NULL, VM_FILE, NULL, file_backed_initializer);
+    copy_base_init(hash, dst_page, src_page);
+    swap_in(dst_page, src_page->page_group->frame->kva);
+    pml4_set_perm(src_page->pml4, src_page->va, false, PTE_W);
+    return true;
 }
