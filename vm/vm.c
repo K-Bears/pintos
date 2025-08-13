@@ -177,16 +177,12 @@ static struct frame *vm_get_victim(void) {
 static struct frame *vm_evict_frame(void) {
     struct frame *victim = vm_get_victim();
     /*  swap out the victim and return the evicted frame. */
-    lock_acquire(&victim->page_group->lock);
-    struct list_elem *e = list_begin(list_back(&victim->page_group->page_list));
+    struct list_elem *e = list_begin(&victim->page_group->page_list);
     if (!swap_out(list_entry(e, struct page, list_elem))) {
         NOT_REACHED();
     }
-    for (e; e != list_end(&victim->page_group->page_list);
-         list_next(&victim->page_group->page_list)) {
-        struct page *p = list_entry(e, struct page, list_elem);
-        pml4_clear_page(p->pml4, p->va);
-    }
+    lock_acquire(&victim->page_group->lock);
+    vm_dealloc_pte(&victim->page_group->page_list);
     lock_release(&victim->page_group->lock);
     victim->page_group->frame = NULL;
     victim->page_group = NULL;
@@ -210,13 +206,16 @@ static struct frame *vm_get_frame(void) {
     return frame;
 }
 
-void vm_free_frame(struct frame *frame) {
-    lock_acquire(&frame->page_group->lock);
-    for (struct list_elem *e = list_begin(list_back(&frame->page_group->page_list));
-         e != list_end(&frame->page_group->page_list); list_next(&frame->page_group->page_list)) {
+void vm_dealloc_pte(struct list *page_list) {
+    for (struct list_elem *e = list_begin(page_list); e != list_end(page_list); e = list_next(e)) {
         struct page *p = list_entry(e, struct page, list_elem);
         pml4_clear_page(p->pml4, p->va);
     }
+}
+
+void vm_free_frame(struct frame *frame) {
+    lock_acquire(&frame->page_group->lock);
+    vm_dealloc_pte(&frame->page_group->page_list);
     frame->page_group->frame = NULL;
     lock_release(&frame->page_group->lock);
     frame->page_group = NULL;

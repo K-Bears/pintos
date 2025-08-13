@@ -66,6 +66,7 @@ static bool anon_swap_in(struct page *page, void *kva) {
 /* Swap out the page by writing contents to the swap disk. */
 static bool anon_swap_out(struct page *page) {
     size_t swap_slot = alloc_swap_slot();
+    // bool lock_held = lock_held_by_current_thread(&page->page_group->lock);
     lock_acquire(&page->page_group->lock);
     if (swap_slot == BITMAP_ERROR) {
         return false;

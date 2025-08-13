@@ -109,5 +109,6 @@ enum vm_type page_get_type(struct page *page);
 bool copy_base_init(struct hash *hash, struct page *dst_page, struct page *src_page);
 void vm_free_frame(struct frame *frame);
 void remove_page_group(struct page_group *page_group, struct page *page);
+void vm_dealloc_pte(struct list *page_list);
 
 #endif /* VM_VM_H */
